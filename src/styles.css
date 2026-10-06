@@ -1,7 +1,7 @@
 .mermaid-excalidraw-container {
   width: 100%;
-  min-height: 200px;
-  height: 240px;
+  min-height: 240px;
+  height: 600px;
   position: relative;
   overflow: hidden;
   border: 1px solid var(--background-modifier-border, #d1d5db);
@@ -9,6 +9,14 @@
   background: var(--background-primary, #fff);
   margin-block: 12px;
   isolation: isolate;
+}
+.theme-dark .mermaid-excalidraw-container {
+  background: var(--background-primary, #1e1e1e);
+}
+/* Elements/files already use final visible colors. Disable the default dark
+   canvas inversion, which would turn white strokes black a second time. */
+.mermaid-excalidraw-container .excalidraw.theme--dark canvas {
+  filter: none !important;
 }
 .mermaid-excalidraw-loading {
   padding: 20px;

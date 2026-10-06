@@ -39,14 +39,27 @@ flowchart LR
 
 表示はExcalidrawの公開 `viewModeEnabled` と `zenModeEnabled` を使っています。編集・保存・画像挿入・AI機能は無効で、パン・ズームは使用できます。空のMainMenuを渡して既定の編集メニューを置き換えます。Excalidraw自身のメニューボタンなど、公開APIで除去できない枠は残ります。図内のリンクは開きません。
 
-ObsidianのLight/Dark変更に追従します。ウィンドウのサイズ変更に合わせてbounding boxから高さを計算し、全体が見える倍率に調整します。デフォルトでは240–600pxで、最大高さを200pxに設定した場合は200pxになります。
+ObsidianのLight/Dark変更に追従します。キャンバスはデフォルトで高さ600px・幅100%です。設定した高さと余白の中に全体が収まるよう、表示直後とペインのサイズ変更時に自動フィットします。小さな図は100%を超えて拡大しません。
 
 設定画面では次の項目を変更できます。開いている図にも反映し、`loadData()` / `saveData()` で永続化します。
 
 | 設定 | デフォルト | 範囲 |
 | --- | ---: | ---: |
 | Font size | 20px | 12–48px |
-| Maximum diagram height | 600px | 200–1200px |
+| Roughness | 1（Architect） | 0 = Clean / 1 = Architect / 2 = Artist |
+| Canvas height | 600px | 240–1200px |
+| Canvas padding | 32px | 16–128px |
+| Theme | Follow Obsidian | 現在は自動追従のみ |
+
+Appearanceセクションから変更できます。従来の `maxHeight` は設定データとして保持し、`canvasHeight` がまだないインストールでは新しい高さへ移行します（240–1200pxに補正）。横幅はノート幅に自然に追従するため固定幅設定は追加していません。
+
+Excalidraw 0.18.1の要素共通型では `roughness: number` と定義されています。インストール済みUIの値0・1・2を使用し、表示名は本プラグイン用に上表の名称としています（Excalidraw自身の名称はArchitect / Artist / Cartoonist）。変換後に公開 `newElementWith()` でroughness・strokeColor・fillを調整します。text/imageにも共通プロパティはありますが、文字の形やSVG画像の線をroughnessで手書き化することはできません。
+
+テーマ判定には各ノートのdocumentの `body.theme-dark`、背景には `--background-primary` を使ったコンテナの実際のCSS背景色を使用します。背景の相対輝度から黒・白それぞれのコントラストを比較し、読みやすい方を文字・線・矢印・図形の境界線に選びます。図形のfillは背景色へ揃えます。カスタムテーマでDark設定なのに背景が明るい場合も、背景に対して適切な文字色になります。
+
+テーマの自動追従はプラグイン単位で登録する公開 `workspace.css-change` イベント1つで行い、diagramごとのMutationObserverは作りません。同じLight/Dark内でCSS背景色だけが変わった場合にも追従します。ExcalidrawのDarkキャンバスの既定色反転は、このプラグインのキャンバス内に限定して無効化し、正規化した白い文字が黒へ戻るのを防ぎます。
+
+余白は公開 `scrollToContent({ fitToContent: true, canvasOffsets, maxZoom: 1 })` で指定します。上下左右の設定値に加えて下部の操作UI用に48pxを確保し、極端に小さいペインでは少なくとも80pxの表示領域を残すよう余白を減らします。elementの座標は書き換えません。Excalidraw 0.18.1の最小ズームは10%なので、それでも収まらない極端に巨大な図は全体フィットできず、パンによる閲覧が必要です。
 
 構文エラーはノート内に `Mermaid diagram could not be rendered.` と詳細を表示します。エラー文字列はReactのテキストとして表示し、HTMLとして挿入しません。
 
@@ -91,7 +104,7 @@ Active --> [*]
 
 ### SVG fallback
 
-Gantt・Pie・Timelineなど、上流がネイティブ変換しないタイプはSVG画像としてExcalidraw上に表示されます。その場合はMermaidの見た目が残ります。diagram typeはプラグインで制限せず、`files` を `addFiles()` に渡して上流のフォールバックを維持します。
+Gantt・Pie・Timelineなど、上流がネイティブ変換しないタイプはSVG画像としてExcalidraw上に表示されます。上流生成SVGの文字・線・fillだけを白黒テーマへ正規化し、図の構造・座標・フォントは保持します。画像ファイルには配色ごとのIDを付け、公開 `addFiles()` の画像キャッシュに古い色が残るのを防ぎます。SVG以外の画像はそのまま渡します。SVG画像内のroughnessは変更できず、レイアウトや図形はMermaidのものが残ります。
 
 ````markdown
 ```mermaid-excalidraw
@@ -110,6 +123,7 @@ Markdown code block
   → conversion queue + parseMermaidToExcalidraw()
   → ExcalidrawElementSkeleton[] (+ files)
   → convertToExcalidrawElements()
+  → appearance normalization (roughness / colors / SVG files)
   → API.updateScene() + API.addFiles()
   → bounding box / API.refresh() / API.scrollToContent()
   → <Excalidraw viewModeEnabled zenModeEnabled />
@@ -122,7 +136,10 @@ Markdown code block
 | `src/renderer/ExcalidrawRenderChild.ts` | React Root、変換キャンセル、unmount |
 | `src/renderer/conversion.ts` | 上流変換の呼び出し、順序制御、エラー処理 |
 | `src/renderer/ExcalidrawView.tsx` | 公開React/APIでの閲覧表示、サイズ追従 |
-| `src/renderer/layout.ts` | 高さ計算とテーマ判定 |
+| `src/renderer/layout.ts` | 公開APIによる余白とフィットの設定 |
+| `src/appearance/applyAppearance.ts` | 型安全な要素のroughness・配色正規化 |
+| `src/appearance/resolveTheme.ts` | Obsidian背景色と白黒コントラストの判定 |
+| `src/appearance/normalizeSvgFiles.ts` | SVG画像の配色正規化、画像ID更新 |
 | `src/settings/` | 設定検証と設定タブ |
 | `scripts/build-assets.mjs` | CSSのscope化とフォントのdata URL化 |
 
@@ -146,7 +163,7 @@ Markdown code block
 
 Mermaidの公開設定 `securityLevel: "strict"` を使用し、`secure` で入力内のinit/frontmatterからsecurityLevel・サイズ制限などが上書きされないようにします。公開ラッパーの型は設定の一部のみを公開していますが、インストール済みソースが設定オブジェクトをMermaidへ渡すことを確認し、構造的型付けで追加設定を渡します。`any` やprivate APIへの依存はありません。
 
-入力は50,000文字・500 edgeに制限します。変換ライブラリ内部では一時SVGを生成しますが、プラグイン自身でSVG/ASTを解析したり、Mermaid parserを実装したりしません。上流のSVGは上流のstrict設定でサニタイズされます。
+入力は50,000文字・500 edgeに制限します。変換ライブラリ内部では一時SVGを生成します。プラグインはMermaid parserやdiagram rendererを独自実装しません。Appearance層では上流SVGを標準のDOMParserで読み、色のstyle宣言だけを正規化して再シリアライズします。SVGをホストDOMに挿入することはありません。上流のSVGは上流のstrict設定でサニタイズされます。
 
 図の変換精度・SVG fallbackのテーマ/文字サイズ・巨大図のレイアウトは上流仕様に依存します。同梱するフォントと全diagram rendererにより、配布バンドルは比較的大きくなります。MVPではキャッシュ・遅延mount・SVG/PNG/.excalidrawのエクスポートは実装していません。
 
@@ -156,13 +173,13 @@ Mermaidの公開設定 `securityLevel: "strict"` を使用し、`secure` で入�
 npm run dev          # TypeScript / CSSの変更をwatch
 npm run typecheck
 npm run lint
-npm run test         # 設定・高さ・テーマ・変換ラッパーのunit test
+npm run test         # 設定・余白・コントラスト・変換ラッパーのunit test
 npm run build
 npm run test:browser # Chromeで実際の配布main.jsを検証
 npm run test:vault   # 手動確認用のtest-vault/を生成
 ```
 
-ブラウザーテストはObsidianのhost APIだけをmockし、配布用の実際の `main.js` とMermaid・React・Excalidrawを使用します。Flowchart・Sequenceのネイティブ変換、Class・ER・State・Gantt・Pie・TimelineのSVG fallback、構文エラー、20個同時描画、IDの重複、テーマ変更、設定変更、狭い画面、非同期処理中のunload、プラグイン無効化を検証します。上流のフォールバック診断だけを許容し、その他のconsole error・warning・未処理例外は失敗として扱います。描画例を `test-results/diagrams-light.png` / `diagrams-dark.png` に保存します。
+ブラウザーテストはObsidianのhost APIだけをmockし、配布用の実際の `main.js` とMermaid・React・Excalidrawを使用します。Flowchart・Sequenceのネイティブ変換、Class・ER・State・Gantt・Pie・TimelineのSVG fallback、構文エラー、20個同時描画、IDの重複、Light/Dark往復、設定変更、狭い画面、非同期処理中のunload、プラグイン無効化を検証します。Appearance設定UIの操作・保存、roughness 0/1/2の描画差、余白によるフィットの変化、小図の拡大抑止、カスタム背景色、カラフルな入力も検証します。実際のcanvas画素を読み、SVGを含めた背景色・白黒の線・文字と色反転の無効化を確認します。上流のフォールバック診断だけを許容し、その他のconsole error・warning・未処理例外は失敗として扱います。描画例を `test-results/diagrams-light.png` / `diagrams-dark.png` に保存します。
 
 ローカルはGoogle Chromeを使用します。Chromiumだけを使用する場合は次のように実行してください。
 
@@ -176,3 +193,19 @@ PLAYWRIGHT_CHANNEL=chromium npm run test:browser
 CIはNode.js 22でinstall・lint・unit test・build・Chromiumの描画テストを実行し、3ファイルの配布フォルダーと検証結果をartifactとして保存します。
 
 2026-10-07のローカル検証では、install・build・typecheck・lint、15件のunit test、4件のブラウザーテストが成功しました。ブラウザーテストはproductionとdevelopmentのReactで実行し、20図でReact warningが出ないことを確認しました。macOS / Obsidian 1.13.7でもプラグインのロード、設定画面、Reading ViewのFlowchart・Sequence・SVG fallback・inline error、ノート切り替えを確認しています。ランタイム依存の `npm audit --omit=dev` は0件でした。
+
+今回のAppearance追加後（2026-10-07）は、TypeScriptエラー0、lint、unit test 22件、ブラウザーテスト8件、`npm run build` がすべて成功しました。配布用のproductionバンドルで検証しています。macOS / Obsidian 1.13.7のテストVaultでも、Roughness 0/1/2、Canvas height 240/400/600 px、Canvas padding 32/128 px、Light/Darkの自動配色と既存図の更新を確認しました。Flowchart・Sequence、Class・ER・StateのSVG fallback、およびLightでのGantt・Pie・Timelineを実機で確認しています。テスト後はSystemテーマとAppearanceの初期設定に戻しています。
+
+実機確認では、Obsidianがキャッシュした非表示のReading Viewセクションを再表示すると、Excalidrawの内部表示サイズが0×0のままで図が空白になる問題を発見して修正しました。0.18.1の `refresh()` はオフセットのみを更新するため、公開APIの `updateScene()` で表示サイズを同期してから `scrollToContent()` を呼びます。修正版をテストVaultへ再インストールしてObsidianを再ロードし、Class・ER・Stateの表示を確認しました。非表示状態でのmountと再表示・幅変更・Dark切り替えもブラウザーの回帰テストで検証しています。
+
+## Appearance追加の変更ファイル
+
+| 分類 | ファイル |
+| --- | --- |
+| 新規Appearance層 | `src/appearance/applyAppearance.ts`、`src/appearance/resolveTheme.ts`、`src/appearance/normalizeSvgFiles.ts` |
+| 設定・型 | `src/settings/settings.ts`、`src/settings/SettingsTab.ts`、`src/types.ts` |
+| 既存レンダリングの拡張 | `src/renderer/ExcalidrawView.tsx`、`src/renderer/ExcalidrawRenderChild.ts`、`src/renderer/MermaidExcalidrawRenderer.ts`、`src/renderer/layout.ts` |
+| CSS | `src/styles.css` |
+| ブラウザーテスト | `tests/browser/renderer.spec.ts`、`tests/browser/harness.ts`、`tests/browser/obsidian-mock.ts` |
+| 単体テスト | `tests/unit/settings.test.ts`、`tests/unit/layout.test.ts` |
+| ドキュメント | `README.md` |

@@ -1,24 +1,15 @@
-import type { DiagramTheme } from "../types";
-import { HEIGHT_RANGE } from "../settings/settings";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
-export function determineTheme(classList: Pick<DOMTokenList, "contains">): DiagramTheme {
-  return classList.contains("theme-dark") ? "dark" : "light";
-}
+type FitOptions = NonNullable<Parameters<ExcalidrawImperativeAPI["scrollToContent"]>[1]>;
 
-/** Fit the bounding box to the available width, reserving room for padding. */
-export function calculateContainerHeight(
-  bounds: readonly [number, number, number, number],
-  containerWidth: number,
-  maxHeight: number,
-): number {
-  const limit = Number.isFinite(maxHeight)
-    ? Math.min(HEIGHT_RANGE.max, Math.max(HEIGHT_RANGE.min, maxHeight)) : 600;
-  const minimum = Math.min(240, limit);
-  const [x1, y1, x2, y2] = bounds;
-  if (!bounds.every(Number.isFinite)) return minimum;
-  const width = Math.max(1, x2 - x1);
-  const height = Math.max(0, y2 - y1);
-  const available = Number.isFinite(containerWidth) && containerWidth > 0 ? containerWidth : 640;
-  const scale = Math.min(1, Math.max(1, available - 64) / width);
-  return Math.round(Math.max(minimum, Math.min(limit, height * scale + 80)));
+/** Public viewport offsets reserve screen pixels without moving elements.
+ * Keep room for bottom controls and at least 80px of content in small panes.
+ */
+export function canvasFitOptions(width: number, height: number, padding: number): FitOptions {
+  const horizontal = Math.min(padding, Math.max(0, (width - 80) / 2));
+  const vertical = Math.min(padding, Math.max(0, (height - 80 - 48) / 2));
+  return {
+    fitToContent: true, viewportZoomFactor: 1, animate: false, maxZoom: 1,
+    canvasOffsets: { top: vertical, right: horizontal, bottom: vertical + 48, left: horizontal },
+  };
 }

@@ -1,20 +1,23 @@
-import { Component, useCallback, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import {
   CaptureUpdateAction,
   Excalidraw,
   MainMenu,
   convertToExcalidrawElements,
-  getCommonBounds,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import type { DiagramTheme } from "../types";
+import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { PluginSettings } from "../types";
+import { applyAppearance } from "../appearance/applyAppearance";
+import { normalizeSvgFiles } from "../appearance/normalizeSvgFiles";
+import type { ResolvedTheme } from "../appearance/resolveTheme";
 import { errorMessage, type DiagramData } from "./conversion";
-import { calculateContainerHeight } from "./layout";
+import { canvasFitOptions } from "./layout";
 
 interface ViewProps {
   data: DiagramData;
-  theme: DiagramTheme;
-  maxHeight: number;
+  appearance: ResolvedTheme;
+  settings: PluginSettings;
   container: HTMLElement;
 }
 
@@ -42,9 +45,10 @@ const canvasActions = {
   loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false,
 } as const;
 
-export function ExcalidrawView({ data, theme, maxHeight, container }: ViewProps) {
+export function ExcalidrawView({ data, appearance, settings, container }: ViewProps) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const converted = useRef<{ data: DiagramData; elements: ExcalidrawElement[] } | null>(null);
   const receiveAPI = useCallback((value: ExcalidrawImperativeAPI) => setApi(value), []);
 
   useEffect(() => {
@@ -62,26 +66,35 @@ export function ExcalidrawView({ data, theme, maxHeight, container }: ViewProps)
       try {
         await container.ownerDocument.fonts.load("20px Virgil");
         if (cancelled) return;
-        const elements = convertToExcalidrawElements(data.elements);
-        const bounds = getCommonBounds(elements);
+        if (converted.current?.data !== data) {
+          converted.current = { data, elements: convertToExcalidrawElements(data.elements) };
+        }
+        const scene = normalizeSvgFiles(
+          applyAppearance(converted.current.elements, settings, appearance),
+          data.files, appearance,
+        );
         let initialized = false;
         let viewportSize = "";
         const fit = () => {
           if (cancelled || !initialized) return;
           const width = container.clientWidth;
           if (width === 0) return; // Wait for a hidden pane to become visible.
-          container.style.height = `${calculateContainerHeight(bounds, width, maxHeight)}px`;
+          container.style.height = `${settings.canvasHeight}px`;
           if (frame !== undefined) win.cancelAnimationFrame(frame);
           frame = win.requestAnimationFrame(() => {
-            // Obsidian can resize preview sections after mount. Refresh public
-            // viewport dimensions before fitting the scene to the new height.
+            // refresh() updates offsets only in 0.18.1. Obsidian can reveal a
+            // cached section after Excalidraw measured it at 0x0, so synchronize
+            // dimensions through the public scene API before fitting as well.
             api.refresh();
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const state = api.getAppState();
+            if (state.width !== width || state.height !== height) {
+              api.updateScene({ appState: { width, height }, captureUpdate: CaptureUpdateAction.NEVER });
+            }
             frame = win.requestAnimationFrame(() => {
-              if (!cancelled) api.scrollToContent(api.getSceneElements(), {
-                fitToContent: true, viewportZoomFactor: 0.85,
-                animate: false, maxZoom: 1, minZoom: 0.1,
-                canvasOffsets: { top: 16, right: 16, bottom: 64, left: 16 },
-              });
+              if (!cancelled) api.scrollToContent(api.getSceneElements(),
+                canvasFitOptions(container.clientWidth, container.clientHeight, settings.canvasPadding));
             });
           });
         };
@@ -89,8 +102,12 @@ export function ExcalidrawView({ data, theme, maxHeight, container }: ViewProps)
           if (cancelled || api.getAppState().isLoading) return;
           if (!initialized) {
             initialized = true;
-            api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
-            if (data.files) api.addFiles(Object.values(data.files));
+            api.updateScene({
+              elements: scene.elements, appState: { viewBackgroundColor: appearance.background },
+              captureUpdate: CaptureUpdateAction.NEVER,
+            });
+            api.addFiles(Object.values(scene.files));
+            fit();
           }
           const { width, height } = api.getAppState();
           const size = `${width}x${height}`;
@@ -118,12 +135,12 @@ export function ExcalidrawView({ data, theme, maxHeight, container }: ViewProps)
       observer?.disconnect();
       if (frame !== undefined) win.cancelAnimationFrame(frame);
     };
-  }, [api, data, maxHeight, container, failure]);
+  }, [api, data, appearance, settings.roughness, settings.canvasHeight, settings.canvasPadding, container, failure]);
 
   if (failure !== null) return <InlineError message={failure} />;
   return <Excalidraw
     excalidrawAPI={receiveAPI}
-    theme={theme}
+    theme={appearance.theme}
     viewModeEnabled
     zenModeEnabled
     gridModeEnabled={false}
@@ -132,7 +149,7 @@ export function ExcalidrawView({ data, theme, maxHeight, container }: ViewProps)
     aiEnabled={false}
     validateEmbeddable={false}
     onLinkOpen={(_element, event) => event.preventDefault()}
-    initialData={{ appState: { viewBackgroundColor: "transparent" } }}
+    initialData={{ appState: { viewBackgroundColor: appearance.background } }}
     UIOptions={{ canvasActions, tools: { image: false } }}
   >
     <MainMenu />

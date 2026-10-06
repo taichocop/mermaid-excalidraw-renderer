@@ -1,8 +1,8 @@
 import type { MarkdownPostProcessorContext } from "obsidian";
-import type { DiagramTheme, PluginSettings } from "../types";
+import type { PluginSettings } from "../types";
 import { MermaidConverter } from "./conversion";
 import { ExcalidrawRenderChild } from "./ExcalidrawRenderChild";
-import { determineTheme } from "./layout";
+import { resolveTheme } from "../appearance/resolveTheme";
 
 /** Independent of the registered block name so future integrations can reuse it. */
 export class MermaidExcalidrawRenderer {
@@ -19,15 +19,14 @@ export class MermaidExcalidrawRenderer {
     container.setAttribute("aria-label", "Mermaid diagram in Excalidraw view mode");
     element.replaceChildren(container);
     const child = new ExcalidrawRenderChild(container, source, { ...this.settings },
-      determineTheme(element.ownerDocument.body.classList), this.converter, () => this.children.delete(child));
+      resolveTheme(container, this.settings.themeMode), this.converter, () => this.children.delete(child));
     this.children.add(child);
     context.addChild(child);
   }
 
   updateTheme(): void {
     for (const child of this.children) {
-      const theme: DiagramTheme = determineTheme(child.containerEl.ownerDocument.body.classList);
-      child.updateTheme(theme);
+      child.updateTheme(resolveTheme(child.containerEl, this.settings.themeMode));
     }
   }
 

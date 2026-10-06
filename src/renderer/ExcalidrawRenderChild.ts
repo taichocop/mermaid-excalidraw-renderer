@@ -1,7 +1,8 @@
 import { MarkdownRenderChild } from "obsidian";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { DiagramTheme, PluginSettings } from "../types";
+import type { PluginSettings } from "../types";
+import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
 import { type DiagramData, MermaidConverter } from "./conversion";
 import { DiagramErrorBoundary, ExcalidrawView, InlineError } from "./ExcalidrawView";
 
@@ -17,7 +18,7 @@ export class ExcalidrawRenderChild extends MarkdownRenderChild {
     container: HTMLElement,
     private readonly source: string,
     private settings: PluginSettings,
-    private theme: DiagramTheme,
+    private appearance: ResolvedTheme,
     private readonly converter: MermaidConverter,
     private readonly onDispose: () => void,
   ) { super(container); }
@@ -30,13 +31,16 @@ export class ExcalidrawRenderChild extends MarkdownRenderChild {
   updateSettings(settings: PluginSettings): void {
     const shouldConvert = settings.fontSize !== this.settings.fontSize;
     this.settings = { ...settings };
+    this.appearance = resolveTheme(this.containerEl, settings.themeMode);
+    this.containerEl.style.height = `${settings.canvasHeight}px`;
     if (shouldConvert) this.startConversion();
     else this.render();
   }
 
-  updateTheme(theme: DiagramTheme): void {
-    if (theme === this.theme) return;
-    this.theme = theme;
+  updateTheme(appearance: ResolvedTheme): void {
+    if (appearance.theme === this.appearance.theme && appearance.background === this.appearance.background
+      && appearance.foreground === this.appearance.foreground) return;
+    this.appearance = appearance;
     this.render();
   }
 
@@ -48,7 +52,7 @@ export class ExcalidrawRenderChild extends MarkdownRenderChild {
     const generation = ++this.generation;
     this.data = null;
     this.message = null;
-    this.containerEl.style.height = `${Math.min(240, this.settings.maxHeight)}px`;
+    this.containerEl.style.height = `${this.settings.canvasHeight}px`;
     this.containerEl.dataset.state = "loading";
     this.render();
     void this.converter.convert(this.source, this.settings, controller.signal).then((result) => {
@@ -70,7 +74,7 @@ export class ExcalidrawRenderChild extends MarkdownRenderChild {
       ? createElement(InlineError, { message: this.message })
       : this.data
         ? createElement(ExcalidrawView, {
-          data: this.data, theme: this.theme, maxHeight: this.settings.maxHeight,
+          data: this.data, appearance: this.appearance, settings: this.settings,
           container: this.containerEl,
         })
         : createElement("div", { className: "mermaid-excalidraw-loading", role: "status" }, "Rendering diagram…");

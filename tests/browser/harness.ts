@@ -3,6 +3,7 @@ import type { PluginSettings } from "../../src/types";
 import { samples } from "./samples";
 
 interface TestPlugin extends mock.Plugin {
+  settings: PluginSettings;
   onload(): Promise<void>;
   onunload(): void;
   updateSettings(settings: PluginSettings): Promise<void>;
@@ -31,9 +32,15 @@ const harness = {
     document.body.className = dark ? "theme-dark" : "theme-light";
     for (const callback of plugin.events) callback();
   },
-  updateSettings(settings: PluginSettings) { return plugin.updateSettings(settings); },
+  updateSettings(settings: Partial<PluginSettings>) { return plugin.updateSettings({ ...plugin.settings, ...settings }); },
   savedSettings() { return plugin.saved; },
   registeredLanguages() { return [...plugin.processors.keys()]; },
+  openSettings() {
+    if (!plugin.settingTab) throw new Error("Settings tab not registered");
+    plugin.settingTab.display();
+    document.body.append(plugin.settingTab.containerEl);
+  },
+  cssChanged() { for (const callback of plugin.events) callback(); },
   sceneSummaries() {
     return [...children].map((child) => {
       const data: unknown = Reflect.get(child, "data");

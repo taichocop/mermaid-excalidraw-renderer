@@ -1,25 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { calculateContainerHeight, determineTheme } from "../../src/renderer/layout";
+import { canvasFitOptions } from "../../src/renderer/layout";
+import { contrastingForeground, determineTheme } from "../../src/appearance/resolveTheme";
 
 describe("theme", () => {
   it("uses Obsidian's body class", () => {
     expect(determineTheme({ contains: (name) => name === "theme-dark" })).toBe("dark");
     expect(determineTheme({ contains: () => false })).toBe("light");
   });
+  it("chooses the higher contrast color from actual background luminance", () => {
+    expect(contrastingForeground([255, 255, 255])).toBe("#000000");
+    expect(contrastingForeground([30, 30, 30])).toBe("#ffffff");
+    expect(contrastingForeground([120, 120, 120])).toBe("#000000");
+    expect(contrastingForeground([100, 100, 100])).toBe("#ffffff");
+  });
 });
 
-describe("diagram height", () => {
-  it("fits the bounding box and clamps tiny and very tall diagrams", () => {
-    expect(calculateContainerHeight([0, 0, 200, 300], 640, 600)).toBe(380);
-    expect(calculateContainerHeight([0, 0, 10, 10], 640, 600)).toBe(240);
-    expect(calculateContainerHeight([0, 0, 200, 9000], 640, 600)).toBe(600);
-    expect(calculateContainerHeight([0, 0, 200, 300], 640, 200)).toBe(200);
+describe("canvas viewport", () => {
+  it("reserves configurable padding and bottom controls using public fit options", () => {
+    expect(canvasFitOptions(900, 600, 32)).toEqual({
+      fitToContent: true, viewportZoomFactor: 1, animate: false, maxZoom: 1,
+      canvasOffsets: { top: 32, right: 32, bottom: 80, left: 32 },
+    });
+    expect(canvasFitOptions(900, 600, 128).canvasOffsets).toEqual({ top: 128, right: 128, bottom: 176, left: 128 });
   });
-  it("scales wide diagrams for narrow panes", () => {
-    expect(calculateContainerHeight([0, 0, 1000, 1000], 464, 1200)).toBe(480);
-  });
-  it("handles negative coordinates, hidden panes and invalid bounds", () => {
-    expect(calculateContainerHeight([-10, -20, 190, 280], 0, 600)).toBe(380);
-    expect(calculateContainerHeight([NaN, 0, Infinity, 20], 640, NaN)).toBe(240);
+  it("keeps the viewport usable with maximum padding in a narrow, short pane", () => {
+    expect(canvasFitOptions(160, 240, 128).canvasOffsets).toEqual({ top: 56, right: 40, bottom: 104, left: 40 });
+    expect(canvasFitOptions(0, 240, 128).canvasOffsets?.left).toBe(0);
   });
 });
