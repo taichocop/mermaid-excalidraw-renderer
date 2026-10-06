@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mermaid Excalidraw Renderer — browser integration checks</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { font: 16px system-ui; margin: 24px; }
+    main { max-width: 900px; margin: auto; }
+    .theme-dark { --background-primary: #1e1e1e; --text-normal: #ddd; --text-muted: #aaa; --background-modifier-border: #555; background: #181818; color: #ddd; }
+    .theme-light { --background-primary: #fff; --text-normal: #222; --text-muted: #666; background: #fafafa; }
+  </style>
+</head>
+<body class="theme-light">
+  <main></main>
+  <script src="/harness.js"></script>
+  <script>var module = window.pluginModule; var require = window.requirePlugin;</script>
+  <script src="/main.js"></script>
+  <script>window.ready = window.harness.boot(window.pluginModule.exports.default);</script>
+</body>
+</html>

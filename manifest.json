@@ -1,0 +1,9 @@
+{
+  "id": "mermaid-excalidraw-renderer",
+  "name": "Mermaid Excalidraw Renderer",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Render Mermaid diagrams as Excalidraw-style diagrams in Obsidian.",
+  "author": "taichi",
+  "isDesktopOnly": true
+}

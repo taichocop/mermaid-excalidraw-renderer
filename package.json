@@ -1,0 +1,48 @@
+{
+  "name": "mermaid-excalidraw-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Render Mermaid diagrams as Excalidraw-style diagrams in Obsidian.",
+  "license": "MIT",
+  "engines": { "node": "^22.13.0 || >=24.0.0", "npm": ">=10" },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:browser:serve": "node tests/browser/serve.mjs",
+    "test:vault": "npm run build && node scripts/prepare-test-vault.mjs"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@excalidraw/mermaid-to-excalidraw": "2.2.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "mermaid": "11.17.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.0",
+    "obsidian": "1.13.1",
+    "postcss": "^8.5.0",
+    "postcss-selector-parser": "^7.1.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "4.1.11",
+    "vite": "^6.4.3"
+  },
+  "overrides": {
+    "mermaid": "$mermaid",
+    "nanoid": "5.1.16",
+    "sass": "1.105.1",
+    "lodash-es": "4.18.1",
+    "katex": "0.18.2"
+  }
+}
