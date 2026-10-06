@@ -1,0 +1,29 @@
+.mermaid-excalidraw-container {
+  width: 100%;
+  min-height: 200px;
+  height: 240px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border, #d1d5db);
+  border-radius: 8px;
+  background: var(--background-primary, #fff);
+  margin-block: 12px;
+  isolation: isolate;
+}
+.mermaid-excalidraw-loading {
+  padding: 20px;
+  color: var(--text-muted, #666);
+}
+.mermaid-excalidraw-error {
+  padding: 16px;
+  color: var(--text-error, #b91c1c);
+  overflow: auto;
+  max-height: 100%;
+}
+.mermaid-excalidraw-error-detail {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85em;
+  color: var(--text-normal, #333);
+  background: transparent;
+}

@@ -1,9 +1,9 @@
 node_modules/
 .npm-cache/
-main.js
-main.js.map
-styles.css
-THIRD_PARTY_NOTICES.txt
+/main.js
+/main.js.map
+/styles.css
+/THIRD_PARTY_NOTICES.txt
 dist/
 test-results/
 playwright-report/
