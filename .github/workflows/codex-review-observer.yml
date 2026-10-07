@@ -1,0 +1,36 @@
+name: Observe Codex review events
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited]
+  issue_comment:
+    types: [created, edited]
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: >-
+      github.event.sender.type == 'Bot' &&
+      (github.event.pull_request || github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # Observation only. No PR checkout, secrets, reviews, or repair operations.
+      - name: Capture actual GitHub payload
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/review-event"
+          cp "$GITHUB_EVENT_PATH" "$RUNNER_TEMP/review-event/payload.json"
+          jq -n --arg event "$EVENT_NAME" --arg run "$GITHUB_RUN_ID" \
+            '{eventName:$event, runId:$run}' > "$RUNNER_TEMP/review-event/metadata.json"
+          jq '{action, sender: {login:.sender.login, id:.sender.id, type:.sender.type},
+            reviewId:(.review.id // .comment.pull_request_review_id),
+            commitId:(.review.commit_id // .comment.commit_id),
+            pr:(.pull_request.number // .issue.number)}' "$GITHUB_EVENT_PATH" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-event-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review-event/
+          retention-days: 30

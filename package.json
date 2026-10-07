@@ -15,11 +15,12 @@
     "validate:release": "node scripts/validate-release.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:agent-loop",
     "test:browser": "playwright test",
     "test:browser:serve": "node tests/browser/serve.mjs",
     "test:vault": "npm run build && node scripts/prepare-test-vault.mjs",
-    "test:release": "node --test tests/release/*.test.mjs"
+    "test:release": "node --test tests/release/*.test.mjs",
+    "test:agent-loop": "node --test tests/agent-loop/*.test.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",
