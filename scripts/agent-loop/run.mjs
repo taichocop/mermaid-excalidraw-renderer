@@ -90,8 +90,12 @@ async function resolvePRs() {
 
 async function prepare() {
   output('mode', 'skip');
-  const { pr, state, save } = await load();
-  if (!eligible(pr, env.GITHUB_REPOSITORY)) { await api.removeReady(prNumber); return; }
+  const { pr, record, state, save } = await load();
+  if (!eligible(pr, env.GITHUB_REPOSITORY)) {
+    await api.removeReady(prNumber);
+    if (record.value) await save({ ...state, state: 'INACTIVE', cleanReview: null });
+    return;
+  }
   if (!configured()) return;
   // Complete a push recorded before a cancellation, without counting it twice.
   if (state.pendingPush && pr.head.sha === state.pendingPush.sha) {
@@ -127,6 +131,13 @@ async function prepare() {
   }
   if (name === 'workflow_run' && event.workflow_run.head_sha !== pr.head.sha) return;
   const fingerprint = contextHash(context);
+  if (state.cleanReview && (state.cleanReview.headSha !== pr.head.sha
+    || state.cleanReview.fingerprint !== fingerprint)) {
+    await api.removeReady(prNumber);
+    state.cleanReview = null;
+    state.state = 'WAITING_FOR_REVIEW';
+    await save(state);
+  }
   if (state.cleanReview?.headSha === pr.head.sha && state.cleanReview.fingerprint === fingerprint) {
     // CI completion resumes only readiness, never a second fix iteration.
     if (state.state !== 'READY_FOR_HUMAN') await api.removeReady(prNumber);

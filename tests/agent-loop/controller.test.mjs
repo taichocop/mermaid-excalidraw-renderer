@@ -258,3 +258,29 @@ test('validation failure is persisted without marking review processed', async t
   assert.equal(h.state.value.iteration, 0);
   assert.deepEqual(h.state.value.processedReviewIds, []);
 });
+
+test('removing eligibility invalidates both ready label and persisted ready state', async t => {
+  const h = await harness(t, { state: { ...initialState(), state: 'READY_FOR_HUMAN',
+    cleanReview: { headSha: 'head', fingerprint: 'old' } } });
+  h.state.pr.labels = [];
+  const result = await h.execute('prepare');
+  assert.equal(result.code, 0, result.output);
+  assert.equal(h.state.value.state, 'INACTIVE');
+  assert.equal(h.state.value.cleanReview, null);
+  assert.ok(h.state.calls.some(call => call.method === 'DELETE' && call.url.endsWith('/labels/agent-ready')));
+});
+
+test('edited finding invalidates readiness even on a CI-only continuation', async t => {
+  const h = await harness(t);
+  await classify(h, 'informational');
+  h.state.ciGreen = true;
+  assert.equal((await h.execute('finish')).code, 0);
+  assert.equal(h.state.value.state, 'READY_FOR_HUMAN');
+  h.state.reviews = [{ ...review, body: 'New actionable defect' }];
+  writeFileSync(h.eventPath, JSON.stringify({ workflow_run: { head_sha: 'head' } }));
+  const result = await h.execute('prepare', { GITHUB_EVENT_NAME: 'workflow_run' });
+  assert.equal(result.code, 0, result.output);
+  assert.equal(h.state.value.state, 'WAITING_FOR_REVIEW');
+  assert.equal(h.state.value.cleanReview, null);
+  assert.doesNotMatch(result.outputs, /mode=ready/);
+});
