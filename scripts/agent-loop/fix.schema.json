@@ -1,0 +1,7 @@
+{
+  "type": "object", "additionalProperties": false, "required": ["fixedFindingIds", "summary"],
+  "properties": {
+    "fixedFindingIds": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" }
+  }
+}
