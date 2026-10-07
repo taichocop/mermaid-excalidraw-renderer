@@ -4,7 +4,9 @@ Codex Code Reviewはリポジトリの既存の自動実行を利用する。Age
 
 ## 現時点のイベント確認状況
 
-2026-10-08（日本時間）、接続済みGitHub APIで `taichocop/mermaid-excalidraw-renderer` の全状態のPR一覧を取得した結果は `[]`。公開repository eventにはpushとbranch作成のみが存在した。このためCodex Reviewのイベント種別・Bot identity・payloadは**まだ実測できていない**。既知の一般的なBot名で補完していない。
+2026-10-08（日本時間）の初回調査では全状態のPR一覧は `[]` だった。その後、この変更のPR #1を作成し、既存の自動Codex Reviewが起動したことを確認した。Botは `chatgpt-codex-connector[bot]`、numeric IDは `199175422`。GitHub repository Events APIで取得した実際の `IssueCommentEvent`（ID `16686376118`、action `created`）は `tests/agent-loop/evidence/issue-comment-running.json` に保存した。comment ID `6048760861` のsummaryには対象commit `69ab44a` と **Running** が示されている。
+
+ここまで確認できたのは開始summaryで、完了通知の形式はまだ確認中。Runningをレビュー完了とは扱わない。review submission / inline / 完了summaryの種別は、実際の投稿・payloadが揃うまで設定しない。
 
 `codex-review-observer.yml` は候補の `pull_request_review` / `pull_request_review_comment` / `issue_comment` を観測するだけで、BotがPRへ投稿した実際の `GITHUB_EVENT_PATH` とイベント名を30日間artifactとして保存する。修正workflowは下記の実測設定が揃うまで何もしない。候補イベントの購読は検出用であり、Codex Reviewとみなして処理する設定ではない。
 
@@ -41,6 +43,7 @@ PRごとの `codex/agent-loop-state/pr-N` branchに `.agent-loop/state.json` を
 - `PUBLISHING`: push前に予約commitと次iterationを保存済み。
 - `WAITING_FOR_CI`: 指摘なし・ローカル検証済み。CI完了イベントで準備完了のみ再確認。
 - `READY_FOR_HUMAN`: latest HEAD、CI green、build/typecheck/tests成功、未解決actionable findings 0。`agent-ready` labelあり。
+- `INACTIVE`: label解除、draft化、closeなどで対象から外れたPR。再開時にも以前のready判定を再利用しない。
 - `VALIDATION_FAILED`: ログ確認後、同じrunのrerunまたはworkflow_dispatchで復旧。
 - `NEEDS_HUMAN`: 中断したpublicationの予約commitが現在HEADに見つからないなど、人間の確認が必要。
 - `LOOP_LIMIT_REACHED`: 自動修正を停止。上限を変更するだけでは停止状態を解除しない。
