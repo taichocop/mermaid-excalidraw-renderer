@@ -188,4 +188,4 @@ styles.css
 
 ## 2026-10-08 実装整合
 
-実装順はparseMermaidToExcalidraw → convertToExcalidrawElements → appearance/SVG配色正規化 → updateScene/addFiles → refresh/scrollToContent。現行モジュールはREADMEおよびsrc/を参照。依存はExcalidraw 0.18.1、converter 2.2.2、Mermaid 11.17.2、React/react-dom 18.3.1。Class/ER/Stateのfallbackは既知の互換性制約。minimumは1.13.7、desktop onlyを維持。配布物の追加ライセンス/検証ファイルはリリース運用手順に従う。
+実装順はparseMermaidToExcalidraw → convertToExcalidrawElements → appearance/SVG配色正規化 → updateScene/addFiles → refresh/scrollToContent。現行モジュールはREADMEおよびsrc/を参照。依存はExcalidraw 0.18.1、converter 2.2.2、Mermaid 11.17.2、React/react-dom 18.3.1。Class/ER/Stateのfallbackは既知の互換性制約。minimumは1.14.4、desktop onlyを維持。配布物の追加ライセンス/検証ファイルはリリース運用手順に従う。

@@ -17,7 +17,7 @@ SVG fallback preserves Mermaid geometry: it does not turn every diagram type int
 
 ## Installation
 
-**Requirements:** Obsidian **1.13.7 or newer**, desktop app. Mobile is untested and is not supported in this first release.
+**Requirements:** Obsidian **1.14.4 or newer**, desktop app. Mobile is untested and is not supported in this first release.
 
 ### Community directory
 

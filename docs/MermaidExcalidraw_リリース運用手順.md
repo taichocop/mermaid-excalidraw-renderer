@@ -12,7 +12,7 @@
 
 manifest.json、package.json、package-lock.json（rootを含む）、versions.jsonを一致させる。tagはx.y.zのみ、v prefixなし。IDは変更しない。
 
-minAppVersionは1.13.7。使用API自体は古い公開APIだが、ブラウザー/フォント/Excalidrawを含む実機確認記録がある最古の版をサポート下限とする。1.5.0を検証済みと扱わない。現行stableもRelease前に確認する。
+minAppVersionは1.14.4。使用API自体は古い公開APIだが、今回のproduction bundleでnative acceptanceを完了した現行版を初回のサポート下限とする。1.13.7には過去の実機確認記録があるものの今回の候補で再検証していないため、対応下限には採用しない。下限を下げる場合は対象版で最終配布物を検証する。
 
 実行ソースはNode/Electron APIを使わない。API上のモバイル対応可能性と実機検証は別であり、初回版はdesktop onlyを維持する。falseへの変更はモバイル実機検証とREADME更新を伴う。
 

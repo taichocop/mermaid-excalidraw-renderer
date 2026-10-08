@@ -6,40 +6,30 @@ Date: 2026-10-08 (Asia/Tokyo). Host: installed macOS Obsidian 1.14.4, installer 
 
 Installed `main.js` SHA-256: `01bc13539234c3fcdf590ce0447e467c84e10d6ed7aad3c41eca6a93bedacd6c`.
 
-This matches CI artifact from run [37706702539](https://github.com/taichocop/mermaid-excalidraw-renderer/actions/runs/37706702539), source commit `78a0b447efc873913aa3830fd6740d21569e1849`, and the uploaded unpublished GitHub draft asset. Tests use production code, not a native-host mock.
+This matches the production CI artifact from run [37706702539](https://github.com/taichocop/mermaid-excalidraw-renderer/actions/runs/37706702539), source commit `78a0b447efc873913aa3830fd6740d21569e1849`, and the uploaded unpublished GitHub draft asset. Subsequent changes concern documentation/support metadata, not runtime code; new build hashes must still match before publication. These native checks use production code, not a native-host mock.
 
 ## Observed results
 
 | Status | Check | Observation |
 | --- | --- | --- |
 | PASS | Plugin enabled / Reading view | Plugin appears in settings and registered blocks render in the native host. |
-| PASS | Dark Flowchart | Start, OK?, Done, Retry nodes/arrows and labels visibly readable. |
-| PASS | Dark Sequence | Alice/Bob lifelines and message labels visibly readable. |
-| PASS | Dark Class/ER/State | User class members, USER/POST relationship and Idle/Active states visibly readable via expected SVG fallback. |
+| PASS | Light/Dark Flowchart | Start, OK?, Done, Retry nodes/arrows and labels visibly readable in both themes. |
+| PASS | Light/Dark Sequence | Alice/Bob lifelines and message labels visibly readable in both themes. |
+| PASS | Light/Dark Class/ER/State | User class members, USER/POST relationship and Idle/Active states visibly readable via expected SVG fallback in both themes. |
+| PASS | Live theme switch | Switching test-vault from system Dark to Light and back updates already-open diagrams, including SVG State. |
 | PASS | Dark Pie/Timeline | 70%/30% pie labels and 2024/2025 timeline content visibly readable. |
-| WARNING | Gantt | Project/Build/Implement fixture renders, but date ticks overlap. No claim of perfect upstream SVG layout. |
+| WARNING | Gantt | Project/Build/Implement fixture renders, but date ticks overlap. README discloses the upstream SVG layout limitation. |
 | PASS | Invalid Mermaid | Full inline parse error visible as text; other rendered blocks remain present. |
-| PASS | Settings save | UI changed fontSize to 21, roughness to Artist (2), canvasHeight to 580 and canvasPadding to 33. The plugin's data.json contains those values and follow-obsidian theme mode. |
-| NOT VERIFIED | Light / live theme switch | Theme selector was reached; selection did not visibly apply before UI connection failed. Test-vault remains on system theme. |
-| NOT VERIFIED | Settings after host reload | File persistence confirmed, but native reload/reopen verification not completed. |
-| NOT VERIFIED | Native 20 diagrams / note switch | Covered by passing production-bundle browser tests; native run not completed. |
-| NOT VERIFIED | Disable/re-enable | Not completed in native host. |
-| NOT VERIFIED | Supported baseline, final assets | Earlier README recorded 1.13.7 verification. The final candidate has not been retested there in this audit. |
+| PASS | Settings save / plugin reload | UI changed fontSize to 21, roughness to Artist (2), canvasHeight to 580 and canvasPadding to 33. data.json, reopened settings and settings after disable/re-enable all contain those values. |
+| PASS | Native 20 diagrams / note switch | Multiple diagrams note renders at the top and Diagram 20 at the bottom. Empty note clears diagram UI; returning to Diagrams renders again. Host remains usable. This is a smoke check, not an exhaustive memory profile. |
+| PASS | Disable/re-enable | Toggle off removes plugin settings link; toggle on restores it, preserves saved settings and renders diagrams after returning to the note. |
+| PASS | Defaults / host reload | Restored 20 / Architect / 600 / 32 / Follow Obsidian and the test-vault system theme. Used native View → Force Reload; Flowchart renders and reopened settings show these saved values. |
+| PASS | Supported baseline | Initial supported minimum is 1.14.4, the version tested with this candidate. Earlier README recorded 1.13.7 validation; that is historical and not claimed as final-candidate acceptance. See ADR-010. |
 
-Expected converter fallback diagnostics for Class/ER/State and the invalid fixture's parse error were visible in Developer Tools. No unexpected plugin scene exception was observed during the successful rendering checks.
+Expected converter fallback diagnostics for Class/ER/State and the invalid fixture’s parse error were visible in Developer Tools. No unexpected plugin scene exception was observed during the successful rendering checks.
 
-## UI connector limitation
+## UI connector observations
 
-An initial blank canvas was resolved by raising the test-vault window; read-only DOM inspection while inactive reported zero-sized view containers. It must not be recorded as a fixed product bug. Later, operations on Obsidian's separate settings window repeatedly failed with `noWindowsAvailable`, ScreenCaptureKit capture errors and `timeoutReached`. Rebinding the exact installed application path and resetting the UI session did not restore reliable access. Read-only process inspection showed the application still running with no sustained CPU load at that sample; this does not diagnose the source of the connector failure.
+An initial blank canvas was resolved by raising the test-vault window; read-only DOM inspection while inactive reported zero-sized view containers. It must not be recorded as a fixed product bug. Later, the native UI connector returned stale state for a closed separate settings window, with noWindowsAvailable/ScreenCaptureKit/timeoutReached failures. Rebinding the exact installed application after the window closed and using the current inner dropdown item restored operations. All previously blocked acceptance checks above were then completed. These connector failures are not evidence of a plugin crash.
 
-The last changes were made only in the disposable test-vault. Its test settings above were retained so the maintainer can verify persistence. Developer Tools/settings may remain open. Do not overwrite this vault with `npm run test:vault` before checking persistence.
-
-## Checks to complete before public publication
-
-1. Reopen plugin settings and confirm 21 / Artist / 580 / 33; reload the native host and confirm them again.
-2. Switch only the test-vault to Light; inspect Flowchart, Sequence, Class, ER and State, then switch back and verify already-open diagrams follow the theme.
-3. Open `Multiple diagrams`, inspect top/bottom, switch to `Empty note` and back to `Diagrams`; confirm content appears and host remains usable.
-4. Disable and re-enable this plugin in the test-vault, then reopen diagrams and confirm settings persist.
-5. Restore defaults (20 / Architect / 600 / 32 / Follow Obsidian) in the test-vault and record results. Retest final artifacts on the supported baseline or explicitly revise the compatibility claim with evidence.
-
-This document records partial acceptance. It does not waive the release gate in RELEASE_READINESS.md or assert Community Directory approval.
+Settings/defaults are restored only in the disposable test-vault. The private vault was not changed. Community Directory account/policy acceptance, source merge and release publication are separate remaining external steps.

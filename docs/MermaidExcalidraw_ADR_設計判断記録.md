@@ -112,7 +112,7 @@ Obsidianのpane幅に自然に追従させるため。
 
 ## ADR-008 公開版は検証済み対応範囲とfallbackを明示
 
-**Status:** Accepted (release preparation, 2026-10-08)
+**Status:** Accepted (release preparation, 2026-10-08); minimum version decision superseded by ADR-010
 
 ID/name/versionは維持。minAppVersionは以前の1.5.0から実機確認記録のある1.13.7へ引き上げる。公開Obsidian APIの導入版だけでブラウザー/Excalidraw全体の互換性を保証しない。初回版はdesktop onlyを維持し、Node/Electron不要というコード監査結果とモバイル未検証を分けて記録する。
 
@@ -123,3 +123,10 @@ ID/name/versionは維持。minAppVersionは以前の1.5.0から実機確認記�
 **Status:** Accepted (release preparation, 2026-10-08)
 
 manifest/package/lock/versions/tagを検証し、production bundleのexternal importはobsidianのみとする。全テスト後の同一assetからdraft releaseを生成し、公開はreview後。初回Directory提出は現在の公式Webフォームに従い、default-branch HEADとpublished releaseを一致させる。旧PR提出経路は使わない。
+
+
+## ADR-010 初回公開の対応下限を最終候補の実機検証版へ揃える
+
+**Status:** Accepted (native acceptance, 2026-10-08)
+
+minAppVersionとversions.jsonを1.14.4へ揃える。今回のproduction bundleでmacOS Obsidian 1.14.4のnative acceptance（主要5種のLight/Dark、設定保存/再ロード、20図、note切替、disable/re-enable）を完了した。1.13.7の過去の記録を今回の配布候補の検証結果とは扱わない。使用API自体の導入版は低いが、ブラウザー/フォント/Excalidrawまで含む初回版のサポート範囲は実測を優先する。古い版への対応を広げる場合は最終配布物で検証して下限を下げる。ID/name/plugin versionとdesktop-only方針は維持する。

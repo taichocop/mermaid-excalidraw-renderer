@@ -11,7 +11,7 @@ Checked 2026-10-08 against the official [submission guide](https://docs.obsidian
 | Plugin ID | mermaid-excalidraw-renderer |
 | Name | Mermaid Excalidraw Renderer |
 | Version / tag | 0.1.0 (no v prefix) |
-| Minimum Obsidian | 1.13.7 |
+| Minimum Obsidian | 1.14.4 |
 | Author | taichi |
 | Author URL | https://github.com/taichocop |
 | Desktop only | true |
@@ -25,14 +25,14 @@ Public visibility and an empty release list were confirmed using the public GitH
 
 - [ ] Release-preparation changes reviewed and merged to main; default-branch HEAD has the accurate manifest, user README, LICENSE and source.
 - [ ] CI succeeds on that exact commit; no production dependency advisories remain unresolved.
-- [ ] Fresh native-host install of the final assets checked: load, settings save/reload, both themes, diagram matrix, invalid input, note switch, disable/re-enable.
-- [ ] Latest stable desktop tested as well as the supported baseline; do not represent browser-host mocks as native-host verification.
+- [x] Fresh native-host install of the final assets checked: load, settings save/reload, both themes, diagram matrix, invalid input, note switch, disable/re-enable.
+- [x] Current installed desktop 1.14.4 tested; minimum supported version set to that verified baseline; do not represent browser-host mocks as native-host verification.
 - [x] Private vulnerability reporting enabled and API state verified (2026-10-08).
 - [ ] Tag 0.1.0 points to the reviewed commit; validated draft assets verified against SHA256SUMS.txt, then GitHub release published with main.js, manifest.json and styles.css attached.
 - [ ] Release manifest, default-branch manifest, package/lock version and versions.json agree. No source maps, fixtures or credentials in assets.
 - [ ] Maintainer accepts ongoing support responsibilities and all policy disclosures.
 
-Native results and the exact remaining checks are recorded in [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md). Dark rendering/settings-save checks have passed on 1.14.4; the complete native gate above is still open.
+Native results and the exact remaining checks are recorded in [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md). The native gate passed on 1.14.4; minimum support is conservatively set to that verified version. Earlier 1.13.7 validation is not claimed for this candidate.
 
 ## Current submission route
 
