@@ -13,7 +13,7 @@ const context = await esbuild.context({
   platform: "browser",
   target: "es2021",
   conditions: [production ? "production" : "development"],
-  external: ["obsidian", "electron", ...builtinModules],
+  external: ["obsidian", "@codemirror/state", "@codemirror/view", "@codemirror/language", "electron", ...builtinModules],
   define: { "process.env.NODE_ENV": JSON.stringify(production ? "production" : "development") },
   plugins: [inlineExcalidrawFonts, bundledNotices],
   loader: { ".woff2": "dataurl" },

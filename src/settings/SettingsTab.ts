@@ -19,7 +19,7 @@ export class SettingsTab extends PluginSettingTab {
     return [
       {
         name: "Render standard mermaid blocks as Excalidraw",
-        desc: "On by default, including after upgrading. Changes immediately refresh open Reading views. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render; standard Mermaid in Live Preview is not supported.",
+        desc: "On by default, including after upgrading. Changes immediately refresh Reading view and Live Preview. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render. Move the cursor into a block to edit its source.",
         control: { type: "toggle", key: "renderStandardMermaid", defaultValue: DEFAULT_SETTINGS.renderStandardMermaid },
       },
       {

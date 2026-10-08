@@ -1,5 +1,6 @@
-import { MarkdownPreviewRenderer, MarkdownView, Notice, Plugin } from "obsidian";
+import { editorLivePreviewField, MarkdownPreviewRenderer, MarkdownView, Notice, Plugin } from "obsidian";
 import { MermaidExcalidrawRenderer } from "./renderer/MermaidExcalidrawRenderer";
+import { LivePreview } from "./editor/LivePreview";
 import { SettingsTab } from "./settings/SettingsTab";
 import { DEFAULT_SETTINGS, validateSettings } from "./settings/settings";
 import type { PluginSettings } from "./types";
@@ -7,6 +8,7 @@ import type { PluginSettings } from "./types";
 export default class MermaidExcalidrawPlugin extends Plugin {
   settings: PluginSettings = { ...DEFAULT_SETTINGS };
   private renderer: MermaidExcalidrawRenderer | null = null;
+  private livePreview: LivePreview | null = null;
   private saves: Promise<void> = Promise.resolve();
 
   async onload(): Promise<void> {
@@ -18,6 +20,15 @@ export default class MermaidExcalidrawPlugin extends Plugin {
       new Notice("Mermaid Excalidraw: could not load settings; using defaults.");
     }
     this.renderer = new MermaidExcalidrawRenderer(this.settings);
+    this.livePreview = new LivePreview({
+      isLivePreview: (state) => state.field(editorLivePreviewField, false) === true,
+      settings: () => this.settings,
+      mount: (source, container, appearance) => {
+        if (!this.renderer) return { dispose() {} };
+        return this.renderer.createMount(source, container, appearance);
+      },
+    });
+    this.registerEditorExtension(this.livePreview.extension);
     this.registerMarkdownCodeBlockProcessor("mermaid-excalidraw", (source, element, context) => {
       this.renderer?.render(source, element, context);
     });
@@ -43,6 +54,7 @@ export default class MermaidExcalidrawPlugin extends Plugin {
     const previouslyEnabled = this.settings.renderStandardMermaid;
     this.settings = validateSettings(settings);
     this.renderer?.updateSettings(this.settings);
+    this.livePreview?.updateSettings();
     if (previouslyEnabled !== this.settings.renderStandardMermaid) {
       this.renderer?.clearStandardBlocks();
       this.refreshMarkdownPreviews();
@@ -56,6 +68,8 @@ export default class MermaidExcalidrawPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.livePreview?.dispose();
+    this.livePreview = null;
     this.renderer?.dispose();
     this.renderer = null;
     // Component.unload removes registered callbacks before calling onunload.

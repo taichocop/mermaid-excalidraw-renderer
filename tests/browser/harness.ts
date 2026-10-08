@@ -1,4 +1,8 @@
 import { stripInlineColors } from "../../src/appearance/svgStyles";
+import * as cmState from "@codemirror/state";
+import * as cmView from "@codemirror/view";
+import * as cmLanguage from "@codemirror/language";
+import { EditorHarness } from "./editor-harness";
 import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
@@ -13,6 +17,7 @@ interface TestPlugin extends mock.Plugin {
 }
 type PluginClass = new () => TestPlugin;
 let plugin: TestPlugin;
+const editors = new EditorHarness(() => plugin.editorExtensions);
 const children = new Set<mock.MarkdownRenderChild>();
 
 type Block = { source: string; language: string };
@@ -24,7 +29,7 @@ let previewInvalidated = false;
 function clearRendered() {
   for (const child of [...children]) child.unload();
   children.clear();
-  document.querySelector("main")?.replaceChildren();
+  document.getElementById("reading")?.replaceChildren();
 }
 function renderBlock({ source, language }: Block) {
   const block = document.createElement("section");
@@ -34,7 +39,7 @@ function renderBlock({ source, language }: Block) {
   code.textContent = source + "\n";
   pre.append(code);
   block.append(pre);
-  document.querySelector("main")?.appendChild(block);
+  document.getElementById("reading")?.appendChild(block);
   mock.MarkdownPreviewRenderer.process(block, { addChild(child) {
     children.add(child);
     child.register(() => children.delete(child));
@@ -43,9 +48,11 @@ function renderBlock({ source, language }: Block) {
 }
 const harness = {
   stripInlineColors,
+  editors,
   async boot(Plugin: PluginClass) {
     pluginClass = Plugin;
     plugin = new Plugin();
+    plugin.editorExtensionsChanged = () => editors.reconfigure();
     readingView = new mock.MarkdownView(() => {
       if (readingView.mode === "preview") harness.rerender();
       else {
@@ -71,6 +78,7 @@ const harness = {
   disable() { plugin.unload(); },
   async enable(saved: unknown = plugin.saved) {
     plugin = new pluginClass();
+    plugin.editorExtensionsChanged = () => editors.reconfigure();
     plugin.saved = saved;
     plugin.app.workspace.views = [readingView];
     await plugin.onload();
@@ -82,7 +90,7 @@ const harness = {
   },
   setViewMode(mode: "preview" | "source") {
     readingView.mode = mode;
-    const main = document.querySelector("main");
+    const main = document.getElementById("reading");
     if (main) main.hidden = mode === "source";
     if (mode === "preview" && previewInvalidated) harness.rerender();
   },
@@ -108,6 +116,24 @@ const harness = {
     document.body.append(plugin.settingTab.containerEl);
   },
   cssChanged() { for (const callback of plugin.events) callback(); },
+  mountedScenes() {
+    const renderer: unknown = Reflect.get(plugin, "renderer");
+    if (typeof renderer !== "object" || renderer === null) return [];
+    const mounts: unknown = Reflect.get(renderer, "mounts");
+    if (!(mounts instanceof Set)) return [];
+    return [...mounts].map((mount: unknown) => {
+      if (typeof mount !== "object" || mount === null) throw new Error("Invalid mount");
+      const data = Reflect.get(mount, "data") as DiagramData | null;
+      const appearance = Reflect.get(mount, "appearance") as { background: string };
+      return { source: Reflect.get(mount, "source") as string, ready: !!data, background: appearance.background,
+        imageFallback: !!data?.files, types: data?.elements.map((element) => element.type) ?? [],
+        labels: data?.elements.flatMap((element) => {
+          if ("text" in element) return [element.text];
+          return "label" in element && element.label?.text ? [element.label.text] : [];
+        }) ?? [],
+      };
+    });
+  },
   sceneSummaries() {
     return [...children].map((child) => {
       const data: unknown = Reflect.get(child, "data");
@@ -145,12 +171,15 @@ declare global {
   interface Window {
     harness: typeof harness;
     pluginModule: { exports: { default?: PluginClass } };
-    requirePlugin: (name: string) => typeof mock;
+    requirePlugin: (name: string) => unknown;
   }
 }
 window.harness = harness;
 window.pluginModule = { exports: {} };
 window.requirePlugin = (name) => {
   if (name === "obsidian") return mock;
+  if (name === "@codemirror/state") return cmState;
+  if (name === "@codemirror/view") return cmView;
+  if (name === "@codemirror/language") return cmLanguage;
   throw new Error(`Unexpected runtime require: ${name}`);
 };

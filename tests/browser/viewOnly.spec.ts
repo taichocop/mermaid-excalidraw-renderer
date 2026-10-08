@@ -175,3 +175,53 @@ test("inline SVG colors are stripped in detached XML and a foreign window withou
   expect(result.globalCheck).toBe(false);
   expect(result.values).toEqual(Array.from({ length: 2 }, () => ({ detached: true, fill: "", stroke: "", opacity: "0.5", color: "", background: "", fontSize: "18px", width: "20", namespace: "http://www.w3.org/2000/svg", htmlNamespace: "http://www.w3.org/1999/xhtml" })));
 });
+
+test("Live Preview shares the viewer boundary while CM6 source editing and disposal remain intact", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(window, { lpClipboardCalls: [] });
+    const called = () => (Reflect.get(window, "lpClipboardCalls") as string[]).push("clipboard");
+    Object.defineProperty(navigator, "clipboard", { value: {
+      writeText: async () => { called(); }, write: async () => { called(); },
+      readText: async () => { called(); return "Fixture"; }, read: async () => { called(); return []; },
+    } });
+    document.execCommand = () => { called(); return true; };
+  });
+  await page.goto("/"); await page.evaluate(() => window.ready);
+  const doc = "Before\n\n```mermaid\nflowchart LR\nA[Disposable]-->B[Fixture]\n```\n\nAfter";
+  await page.evaluate(doc => window.harness.editors.create("boundary-editor", doc), doc);
+  const editor = page.locator("#boundary-editor");
+  await expect(editor.locator('[data-state="ready"]')).toHaveCount(1);
+  const before = await page.evaluate(() => window.harness.editors.snapshot("boundary-editor"));
+  const canvas = editor.locator("canvas.interactive");
+  await canvas.click();
+  const blocked = await canvas.evaluate(node => {
+    const data = new DataTransfer(); data.setData("text/plain", "Disposable");
+    const event = new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: data });
+    node.ownerDocument.dispatchEvent(event);
+    return event.defaultPrevented && data.getData("text/plain") === "Disposable";
+  });
+  expect(blocked).toBe(true);
+  await canvas.click({ button: "right" });
+  await expect(page.locator(".context-menu")).toHaveCount(0);
+  await page.keyboard.press("?"); await expect(page.getByRole("dialog")).toHaveCount(0);
+  const reset = editor.getByRole("button", { name: "Reset zoom", exact: true });
+  const zoom = await reset.textContent();
+  await editor.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(reset).not.toHaveText(zoom!);
+  expect(await page.evaluate(() => window.harness.editors.snapshot("boundary-editor"))).toEqual(before);
+  await page.evaluate(() => {
+    const h = window.harness.editors; h.select("boundary-editor", [[0, 0]]);
+    h.view("boundary-editor").focus();
+  });
+  const outside = await page.evaluate(() => {
+    const node = window.harness.editors.view("boundary-editor").contentDOM;
+    const event = new KeyboardEvent("keydown", { key: "q", code: "KeyQ", bubbles: true, cancelable: true });
+    node.dispatchEvent(event); return event.defaultPrevented;
+  });
+  expect(outside).toBe(false);
+  await page.keyboard.type("Edited ");
+  expect((await page.evaluate(() => window.harness.editors.snapshot("boundary-editor"))).doc).toBe(`Edited ${doc}`);
+  await page.evaluate(() => window.harness.editors.destroy("boundary-editor"));
+  await expect(page.locator("canvas")).toHaveCount(0);
+  expect(await page.evaluate(() => Reflect.get(window, "lpClipboardCalls"))).toEqual([]);
+});

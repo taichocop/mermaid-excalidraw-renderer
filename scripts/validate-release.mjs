@@ -69,9 +69,9 @@ export async function validateRelease({ root = '.', metadataOnly = false, tag = 
   assert.deepEqual(JSON.parse(await readFile(`${dir}/manifest.json`, 'utf8')), manifest, 'Built manifest is stale');
   const meta = await json('dist/build-meta.json');
   for (const output of Object.values(meta.outputs)) {
-    for (const dep of output.imports) assert.equal(dep.path, 'obsidian', `Unexpected runtime dependency: ${dep.path}`);
+    for (const dep of output.imports) assert.ok(['obsidian', '@codemirror/state', '@codemirror/view', '@codemirror/language'].includes(dep.path), `Unexpected runtime dependency: ${dep.path}`);
   }
-  assert.ok(!Object.keys(meta.inputs).some((f) => /node_modules\/obsidian\//.test(f)), 'Host API must remain external');
+  assert.ok(!Object.keys(meta.inputs).some((f) => /node_modules\/(?:obsidian|@codemirror|@lezer)\//.test(f)), 'Host APIs must remain external');
   const js = await readFile(`${dir}/main.js`, 'utf8');
   assert.ok(!js.includes('sourceMappingURL='), 'Production JS must not include source maps');
   assert.ok(js.includes('MIT License') && js.includes('Third-party notices'), 'Missing bundled license notices');
@@ -85,7 +85,7 @@ export async function validateRelease({ root = '.', metadataOnly = false, tag = 
   }
   await writeFile(`${dir}/SHA256SUMS.txt`, `${sums.join('\n')}\n`);
   await inspectReleaseAssets(dir);
-  console.log(`Validated ${manifest.id} ${manifest.version}; runtime imports: obsidian only.`);
+  console.log(`Validated ${manifest.id} ${manifest.version}; runtime imports: public Obsidian/CodeMirror APIs only.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
