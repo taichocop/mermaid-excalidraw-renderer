@@ -15,3 +15,14 @@ test-vault/
 !.env.example
 *.pem
 *.key
+
+# Local Orca / Hermes / Agent Harness settings and runtime data
+/.orca/
+/.hermes/
+/.env-harness.yml
+/.agent-local/
+/.tools/
+/.artifacts/
+/.agent-loop-state/
+/orca.yaml
+/orca.yml
