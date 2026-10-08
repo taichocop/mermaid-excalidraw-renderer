@@ -4,6 +4,10 @@
 
 ## [0.1.0]
 
+Published: [2026-10-08](https://github.com/taichocop/mermaid-excalidraw-renderer/releases/tag/0.1.0).
+
+Community Directory: an owner management entry was observed after user submission. Scanner outcome and public listing approval remain unconfirmed.
+
 ### Added
 
 - `mermaid-excalidraw` blocks in Reading view, native Flowchart/Sequence rendering and SVG fallback for Class/ER/State and other Mermaid types.
