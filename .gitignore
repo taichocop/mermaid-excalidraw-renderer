@@ -10,6 +10,7 @@ playwright-report/
 tests/browser/build/
 .DS_Store
 test-vault/
+/docs/
 .env
 .env.*
 !.env.example

@@ -28,6 +28,17 @@ function sameAsset(actual, expected) {
   return actual?.state === 'uploaded' && actual.size === expected.size && actual.digest === expected.digest;
 }
 
+export function releaseNotes(changelog, tag) {
+  const sections = [...changelog.matchAll(/^## ([^\r\n]+)\r?$/gm)];
+  const matches = sections.filter((section) => section[1].trim() === `[${tag}]`);
+  assert.equal(matches.length, 1, `CHANGELOG.md must contain exactly one ## [${tag}] section`);
+  const section = matches[0];
+  const next = sections[sections.indexOf(section) + 1];
+  const notes = changelog.slice(section.index + section[0].length, next?.index).trim();
+  assert.ok(notes.length > 0, `CHANGELOG.md release notes are empty for ${tag}`);
+  return notes + '\n';
+}
+
 // API reads and all mutations are injected so failure/partial-upload cases can be tested offline.
 export async function syncDraftRelease({ client, tag, commit, title, notes, assets }) {
   assert.deepEqual(assets.map((asset) => asset.name).sort(), [...RELEASE_ASSET_NAMES],
@@ -61,7 +72,7 @@ export async function syncDraftRelease({ client, tag, commit, title, notes, asse
     await client.uploadAsset(id, asset);
   }
   await requireDraft();
-  await client.updateDraft(id, { target_commitish: commit, name: title, body: notes });
+  await client.updateDraft(id, { tag_name: tag, target_commitish: commit, name: title, body: notes });
   const actual = await client.listAssets(id); // Refetch ALL pages; never trust only upload responses.
   assert.deepEqual(assetNames(actual), [...RELEASE_ASSET_NAMES], 'Actual release assets differ from validated assets');
   for (const asset of assets) {
@@ -114,7 +125,7 @@ async function main() {
   validateMetadata(manifest, pkg, lock, versions, tag);
   const assets = await inspectReleaseAssets('release-assets'); // Validate names AND checksum contents before any API mutation.
   assert.deepEqual(await json('release-assets/manifest.json'), manifest, 'Uploaded manifest must match source manifest');
-  const notes = await readFile(`docs/releases/${tag}.md`, 'utf8');
+  const notes = releaseNotes(await readFile('CHANGELOG.md', 'utf8'), tag);
   await syncDraftRelease({ client: createGitHubClient(process.env.GITHUB_REPOSITORY), tag, commit,
     title: `${manifest.name} ${tag}`, notes, assets });
   console.log(`Verified draft ${tag}: exact validated asset names, sizes and SHA-256 digests.`);
