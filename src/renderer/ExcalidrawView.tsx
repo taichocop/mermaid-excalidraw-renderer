@@ -82,6 +82,7 @@ export function ExcalidrawView({ data, appearance, settings, container }: ViewPr
           container.style.height = `${settings.canvasHeight}px`;
           if (frame !== undefined) win.cancelAnimationFrame(frame);
           frame = win.requestAnimationFrame(() => {
+            if (cancelled) return;
             // refresh() updates offsets only in 0.18.1. Obsidian can reveal a
             // cached section after Excalidraw measured it at 0x0, so synchronize
             // dimensions through the public scene API before fitting as well.
