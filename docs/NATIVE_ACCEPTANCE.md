@@ -33,3 +33,19 @@ Expected converter fallback diagnostics for Class/ER/State and the invalid fixtu
 An initial blank canvas was resolved by raising the test-vault window; read-only DOM inspection while inactive reported zero-sized view containers. It must not be recorded as a fixed product bug. Later, the native UI connector returned stale state for a closed separate settings window, with noWindowsAvailable/ScreenCaptureKit/timeoutReached failures. Rebinding the exact installed application after the window closed and using the current inner dropdown item restored operations. All previously blocked acceptance checks above were then completed. These connector failures are not evidence of a plugin crash.
 
 Settings/defaults are restored only in the disposable test-vault. The private vault was not changed. Community Directory account/policy acceptance, source merge and release publication are separate remaining external steps.
+
+## Fresh pre-publication repeat — 2026-10-08
+
+Repeated in the installed macOS Obsidian 1.14.4 after the maintainer explicitly requested another native check before publication. The production files in the isolated test-vault match the local build, draft downloads and exact-main CI run [37716342157](https://github.com/taichocop/mermaid-excalidraw-renderer/actions/runs/37716342157) at `2b4c359c43b90f86e3e9007bb697b1fe26fe3de4`. The `main.js` SHA-256 remains the artifact identity above; no product runtime changed in this preparation follow-up.
+
+- Flowchart and Sequence, and Class/ER/State SVG fallbacks: readable labels, shapes and connections in both Light and Dark. Single-diagram notes were used to inspect the entire scenes.
+- Pie and Timeline: readable in both themes. Gantt renders Project/Build/Implement, with the same disclosed overlapping date ticks in both themes.
+- Changing the vault appearance from system Dark to Light updates an already-open native Flowchart; changing Light to Dark updates an already-open Gantt SVG fallback without reopening its note.
+- Invalid Mermaid displays the inline text parse error. Opening the valid Flowchart afterwards succeeds.
+- Changed plugin font size from 20 to 21 in its settings UI. After native View → Force Reload, reopened settings still show 21. Disabled and re-enabled the plugin; its settings entry returns, 21 is retained, and diagrams render after returning to the note. The saved plugin data also reports 21.
+- Restored font size 20, Architect, height 600, padding 32, Follow Obsidian, and the test-vault appearance's system-theme selection.
+- The 20-diagram note renders Diagram 1 and Diagram 20 at opposite ends. Switching to Empty note removes diagram UI; switching back to the single Flowchart renders again. This remains a smoke check, not a memory-leak measurement.
+
+Native screenshots were retained locally for review; private account screens and Orca/Hermes configuration are excluded from repository evidence. Early screen capture and accessibility clicks disagreed with visible content across displays. Moving the test window to CS2420 and using screenshot-grounded coordinates restored consistent observation; only the subsequently verified scenes are reported as repeat results. The UI connector issue is not a product fix or evidence of a plugin crash. No developer-console exception audit is claimed for this repeat.
+
+The repeat native gate is complete. Human review/merge of preparation changes, explicit release-source approval, tag workflow, final draft-asset verification, publication and directory policy/support acceptance remain separate steps.
