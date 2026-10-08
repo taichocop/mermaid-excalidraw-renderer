@@ -1,6 +1,6 @@
 # Release readiness — 0.1.0
 
-Audit and publication update: 2026-10-08 (Asia/Tokyo). The GitHub release is published; a Community Directory owner management entry was observed after user submission. Scanner outcome and public listing approval remain unconfirmed.
+Audit and publication update: 2026-10-08 (Asia/Tokyo). The GitHub release and Community Directory public listing are published. The public Scorecard results are recorded below; scanner findings require triage.
 
 ## Current release status
 
@@ -12,10 +12,22 @@ The `docs/` folder remains local and ignored, and was removed from Git tracking 
 
 ## Community Directory status
 
-After user submission, the maintainer directly observed the [owner management entry](https://community.obsidian.md/account/plugins/mermaid-excalidraw-renderer) (account access required), titled `Mermaid Excalidraw Renderer - Obsidian plugins`, with a `Review` section. This confirms management entry creation; it does not establish a scanner pass or public listing approval.
+After the user reported pressing publish, the maintainer directly observed the [public listing](https://community.obsidian.md/plugins/mermaid-excalidraw-renderer), headed `Mermaid Excalidraw Renderer`, with an [Add to Obsidian](obsidian://show-plugin?id=mermaid-excalidraw-renderer) link. This confirms the listing is published, beyond the previously observed owner management entry.
 
-- Scanner outcome and any required follow-up have not yet been verified.
-- Directory approval and public listing remain unconfirmed. The management entry and public GitHub release do not establish either.
+The maintainer also inspected the public Scorecard while signed out, with `Sign in` and `Add to Obsidian` visible.
+
+| Displayed field | Observed value |
+| --- | --- |
+| Current version | 0.1.0 |
+| Platforms | Desktop only |
+| Desktop compatibility | Obsidian 1.14.4+ |
+| Health | Excellent |
+| Review | Satisfactory |
+| Review issues | 18 (Warnings: 9; Other: 9) |
+| Disclosures | 11 |
+| Passed checks | 2: no vulnerable dependencies; build reproduces main.js byte-for-byte |
+
+These measured labels do not mean zero scanner issues or that every rule passes. Detailed findings and triage are tracked in [Issue #16](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/16).
 
 ## Historical draft-sync failure (resolved before publication)
 
@@ -58,7 +70,7 @@ ID uses lowercase letters/hyphens only, cannot contain obsidian or end in plugin
 | Status | Result | Evidence / remaining action |
 | --- | --- | --- |
 | PASS | User documentation | English README, executable examples, manual/directory installation, limitations, privacy and support; public CONTRIBUTING, CHANGELOG and SECURITY included. Design and operations docs remain local. |
-| PASS | Identity | ID/name/version preserved; public directory JSON mirror has no matching published identity on 2026-10-08. Final uniqueness is determined by directory submission. |
+| PASS | Identity | ID/name/version preserved. The earlier directory mirror check found no existing matching identity; the public listing is now observed under `mermaid-excalidraw-renderer` as Mermaid Excalidraw Renderer, version 0.1.0. |
 | PASS | Compatibility metadata | minAppVersion/versions now 1.14.4. Used public host APIs include code-block processor/css-change (since 0.9.7), MarkdownRenderChild/loadData/saveData and Setting controls. API availability alone does not establish the embedded browser/font/rendering stack’s compatibility. Current candidate acceptance passed on 1.14.4, so this is the conservative first-release supported baseline. Earlier 1.13.7 evidence is historical, not final-candidate acceptance. |
 | WARNING | Mobile | No runtime Node/Electron import; browser-compatible dependencies. Mobile memory/WebView behavior untested, so existing desktop-only support boundary retained. Not a claim that Node APIs require the restriction. |
 | PASS | Build | Clean npm ci using Node 24.19.0/npm 10.9.2, typecheck, production build and artifact validator pass. Package/lock/manifest/versions agree at 0.1.0. |
@@ -74,14 +86,14 @@ ID uses lowercase letters/hyphens only, cannot contain obsidian or end in plugin
 | PASS | Native acceptance | Production main.js installed in the isolated test-vault on macOS Obsidian 1.14.4. Main five types readable in Light/Dark, live theme updates, Pie/Timeline, safe invalid error, settings persistence through plugin disable/re-enable and host Force Reload, native 20-diagram top/bottom and note switch confirmed. Defaults restored. This evidence applies only while runtime asset hashes remain identical. |
 | WARNING | Native Gantt layout | The simple Gantt fixture renders, but date-axis labels overlap. Upstream SVG geometry is preserved; README discloses this limitation. |
 | PASS | Public release | Original release ID `406265576` published as 0.1.0 from `d0712ed7f8e312102668ee71ffb8c81f1712fc3b`; main/tag CI and asset verification succeeded as recorded above. |
-| OBSERVED | Community Directory entry | Owner management entry and its Review section were directly observed after user submission. |
-| UNCONFIRMED | Directory scanner / listing | Scanner outcome, Directory approval and public listing remain unconfirmed. Management entry creation is not evidence of a scanner pass or listing approval. |
+| PASS | Community Directory listing | Public listing directly observed with Add to Obsidian, version 0.1.0 and Desktop only. Displayed Health: Excellent; Review: Satisfactory. |
+| FOLLOW-UP | Scanner findings | Public Scorecard reports 18 review issues, 11 disclosures and 2 passed checks. Detailed findings and triage are tracked in Issue #16; no all-rules-pass claim is made. |
 
 The original six-attachment draft is now the [public 0.1.0 release](https://github.com/taichocop/mermaid-excalidraw-renderer/releases/tag/0.1.0) with the same release ID. The earlier runtime comparisons below preceded publication.
 
 Linux CI initially passed the runtime changes, then exposed a transient zero-size-canvas read in the hidden-pane test helper. The helper now returns a not-yet-rendered sample and polls for actual ink; it does not waive the rendering assertion. CI run [37706702539](https://github.com/taichocop/mermaid-excalidraw-renderer/actions/runs/37706702539) passed all checks at 78a0b447efc873913aa3830fd6740d21569e1849, including all 10 browser tests. PR #2 is now merged at `2b4c359c43b90f86e3e9007bb697b1fe26fe3de4`; main CI run [37716342157](https://github.com/taichocop/mermaid-excalidraw-renderer/actions/runs/37716342157) passed the required `validate` check from GitHub Actions (App ID 15368). On 2026-10-08, all six downloaded draft attachments matched that main CI artifact and the local Node 24 build by exact names, sizes, SHA-256 and manifest contents. Package/lock/manifest/versions and release notes also agree. Production audit reported zero vulnerabilities.
 
-The commit above is historical runtime acceptance evidence. The published source is `d0712ed7f8e312102668ee71ffb8c81f1712fc3b`, as recorded in the current release status. Matching runtime hashes preserve the native acceptance evidence; review and CI were completed for that source. Scanner outcome and Directory approval/listing remain unconfirmed.
+The commit above is historical runtime acceptance evidence. The published source is `d0712ed7f8e312102668ee71ffb8c81f1712fc3b`, as recorded in the current release status. Matching runtime hashes preserve the native acceptance evidence; review and CI were completed for that source. The Directory public listing and public Scorecard are verified; scanner findings require the focused follow-up above.
 
 ## Historical design discrepancies resolved
 
@@ -93,7 +105,7 @@ The commit above is historical runtime acceptance evidence. The published source
 
 ## Remaining human decisions
 
-No ID/name change is needed. If the live directory reports an identity conflict, stop for HUMAN DECISION before an ID migration. The account owner must review scanner results and address any requested follow-up when available. GitHub publication is complete and the management entry was observed after user submission; scanner outcome and Directory approval/listing remain unconfirmed.
+No ID/name change is needed. If the live directory reports an identity conflict, stop for HUMAN DECISION before an ID migration. GitHub publication and the Directory public listing are complete. Scanner triage and any required remediation belong to Issue #16; no claim that every scanner rule passes is made here.
 
 
 ## Historical PR #2 release infrastructure review follow-up
