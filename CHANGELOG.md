@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Standard `mermaid` blocks in Live Preview use the existing Excalidraw conversion, strict/resource guards and appearance pipeline when **Render standard mermaid blocks as Excalidraw** is ON. OFF leaves the host editor renderer in control; the saved setting and default ON are unchanged.
+- Public CodeMirror 6 StateField block replacements show source whenever any cursor/selection touches the fence range and suspend during composition. Leaving the block renders the latest source without changing Markdown or Undo history. Source mode is untouched.
+- Shared rendering sessions retain separate MarkdownRenderChild and editor-widget ownership, cancel stale work and dispose React roots. Dedicated `mermaid-excalidraw` keeps its existing host code-block path and remains independent of the standard-block setting.
+- Real CM6 tests cover selection, editing/Undo/Redo, composition events, settings and modes, host widget precedence, native/SVG diagrams, multiple editors, errors and async disposal. Synthetic desktop checks in Obsidian 1.14.4 also confirm Flowchart/Sequence, Class single-SVG fallback, ON/OFF with dedicated blocks independent, source editing/Undo/Redo, Japanese IME, Source/Live Preview transitions, Light/Dark, multiple diagrams/panes, scrolling, resizing and disable/re-enable. Full third-party plugin compatibility and other OS input methods remain unverified; mobile remains untested.
+
 ## [0.1.1]
 
 ### Changed

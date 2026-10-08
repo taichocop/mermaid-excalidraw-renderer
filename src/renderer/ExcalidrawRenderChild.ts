@@ -1,94 +1,20 @@
 import { MarkdownRenderChild } from "obsidian";
-import { createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import type { PluginSettings } from "../types";
-import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
-import { type DiagramData, MermaidConverter } from "./conversion";
-import { DiagramErrorBoundary, ExcalidrawView, InlineError } from "./ExcalidrawView";
+import type { DiagramMount } from "./DiagramMount";
 
+/** Reading view keeps its public MarkdownRenderChild ownership and cleanup. */
 export class ExcalidrawRenderChild extends MarkdownRenderChild {
-  private root: Root | null = null;
-  private controller: AbortController | null = null;
-  private generation = 0;
-  private data: DiagramData | null = null;
-  private message: string | null = null;
-  private disposed = false;
+  private mount: DiagramMount | null = null;
 
-  constructor(
-    container: HTMLElement,
-    private readonly source: string,
-    private settings: PluginSettings,
-    private appearance: ResolvedTheme,
-    private readonly converter: MermaidConverter,
-    private readonly onDispose: () => void,
-  ) { super(container); }
+  constructor(container: HTMLElement, private readonly createMount: () => DiagramMount,
+    private readonly onDispose: () => void) { super(container); }
 
-  onload(): void {
-    this.root = createRoot(this.containerEl);
-    this.startConversion();
-  }
+  // Retain test-only scene diagnostics for the Reading view harness.
+  get data() { return this.mount?.data ?? null; }
 
-  updateSettings(settings: PluginSettings): void {
-    const shouldConvert = settings.fontSize !== this.settings.fontSize;
-    this.settings = { ...settings };
-    this.appearance = resolveTheme(this.containerEl, settings.themeMode);
-    this.containerEl.style.height = `${settings.canvasHeight}px`;
-    if (shouldConvert) this.startConversion();
-    else this.render();
-  }
-
-  updateTheme(appearance: ResolvedTheme): void {
-    if (appearance.theme === this.appearance.theme && appearance.background === this.appearance.background
-      && appearance.foreground === this.appearance.foreground) return;
-    this.appearance = appearance;
-    this.render();
-  }
-
-  private startConversion(): void {
-    if (this.disposed || !this.root) return;
-    this.controller?.abort();
-    const controller = new AbortController();
-    this.controller = controller;
-    const generation = ++this.generation;
-    this.data = null;
-    this.message = null;
-    this.containerEl.style.height = `${this.settings.canvasHeight}px`;
-    this.containerEl.dataset.state = "loading";
-    this.render();
-    void this.converter.convert(this.source, this.settings, controller.signal).then((result) => {
-      if (this.disposed || generation !== this.generation || result.status === "cancelled") return;
-      if (result.status === "error") {
-        this.message = result.message;
-        this.containerEl.dataset.state = "error";
-      } else {
-        this.data = result.data;
-        this.containerEl.dataset.state = "ready";
-      }
-      this.render();
-    });
-  }
-
-  private render(): void {
-    if (this.disposed || !this.root) return;
-    const content = this.message !== null
-      ? createElement(InlineError, { message: this.message })
-      : this.data
-        ? createElement(ExcalidrawView, {
-          data: this.data, appearance: this.appearance, settings: this.settings,
-          container: this.containerEl,
-        })
-        : createElement("div", { className: "mermaid-excalidraw-loading", role: "status" }, "Rendering diagram…");
-    this.root.render(createElement(DiagramErrorBoundary, { key: this.generation, children: content }));
-  }
-
+  onload(): void { this.mount = this.createMount(); }
   onunload(): void {
-    this.disposed = true;
-    this.generation++;
-    this.controller?.abort();
-    this.controller = null;
-    this.root?.unmount();
-    this.root = null;
-    this.data = null;
+    this.mount?.dispose();
+    this.mount = null;
     this.onDispose();
   }
 }

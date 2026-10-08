@@ -16,7 +16,7 @@ export class SettingsTab extends PluginSettingTab {
     this.containerEl.empty();
     new Setting(this.containerEl)
       .setName("Render standard mermaid blocks as Excalidraw")
-      .setDesc("On by default, including after upgrading. Changes immediately refresh open Reading views. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render; standard Mermaid in Live Preview is not supported.")
+      .setDesc("On by default, including after upgrading. Changes immediately refresh Reading view and Live Preview. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render. Move the cursor into a block to edit its source.")
       .addToggle((toggle) => toggle.setValue(this.host.settings.renderStandardMermaid)
         .onChange(async (renderStandardMermaid) => {
           await this.host.updateSettings({ ...this.host.settings, renderStandardMermaid });

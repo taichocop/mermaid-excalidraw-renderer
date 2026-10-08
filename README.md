@@ -2,7 +2,7 @@
 
 Render Mermaid diagrams in an Excalidraw-style view directly inside your Obsidian notes.
 
-Write Mermaid text in a normal `mermaid` code block and open **Reading view**. Enabling the plugin renders these blocks in Excalidraw by default, without changing your notes. The plugin works independently of the Excalidraw community plugin. Dedicated `mermaid-excalidraw` blocks also continue to work.
+Write Mermaid text in a normal `mermaid` code block and use **Reading view or Live Preview**. Enabling the plugin renders these blocks in Excalidraw by default, without changing your notes. The plugin works independently of the Excalidraw community plugin. Dedicated `mermaid-excalidraw` blocks also continue to work.
 
 **Upgrading to 0.1.1 changes the initial appearance of existing standard Mermaid blocks.** New installations and older settings without the new option default to ON. To keep Obsidian’s standard display, turn off **Render standard mermaid blocks as Excalidraw** in the plugin settings. A saved OFF value remains OFF after restarting or disabling/re-enabling the plugin.
 
@@ -43,7 +43,7 @@ Optional `SHA256SUMS.txt`, `LICENSE` and `THIRD_PARTY_NOTICES.txt` attachments a
 
 ## Usage
 
-Copy this complete block into a note, then switch to Reading view (the standard-block setting defaults to ON):
+Copy this complete block into a note, then use Reading view or Live Preview (the standard-block setting defaults to ON):
 
 ````markdown
 ```mermaid
@@ -54,6 +54,16 @@ flowchart LR
 ````
 
 Use `mermaid-excalidraw` instead of `mermaid` for a block that should always use this plugin, even when the standard-block setting is OFF.
+
+In Live Preview, move the cursor into the block (including either fence), or select across it, to show its source. Move the selection outside the block to render the latest source. Standard-block replacements are suspended during IME composition. The plugin changes only the display; it does not rewrite Markdown, languages, selections or Undo history. Source mode always keeps the editable Markdown.
+
+Dedicated `mermaid-excalidraw` blocks keep Obsidian’s existing code-block widget and editing behavior in Live Preview. The new editor extension only replaces standard `mermaid` blocks, so it does not add a second dedicated canvas. The standard-block toggle never disables dedicated blocks.
+
+| Mode | Standard `mermaid` ON | Standard `mermaid` OFF | `mermaid-excalidraw` |
+| --- | --- | --- | --- |
+| Reading view | Excalidraw | Host renderer | Excalidraw |
+| Live Preview | Excalidraw outside the selection | Host renderer | Existing host code-block widget |
+| Source mode | Editable Markdown | Editable Markdown | Editable Markdown |
 
 Edit the source text to change the diagram. The view supports panning and zooming; editing drawings, saving Excalidraw files and exporting images are not included.
 
@@ -115,14 +125,14 @@ Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams 
 
 | Control | Default | Range / behavior |
 | --- | --- | --- |
-| Render standard mermaid blocks as Excalidraw | ON | Reading view; OFF restores Obsidian’s standard rendering. Dedicated blocks always use Excalidraw. |
+| Render standard mermaid blocks as Excalidraw | ON | Reading view and Live Preview; OFF restores Obsidian’s standard rendering. Dedicated blocks always use Excalidraw. |
 | Font size | 20 px | 12–48 px; native diagram text |
 | Roughness | Architect (1) | Clean (0), Architect (1), Artist (2) |
 | Canvas height | 600 px | 240–1200 px |
 | Canvas padding | 32 px | 16–128 px; extra space for canvas controls |
 | Theme | Follow Obsidian | Uses the note background and contrasting black/white foreground |
 
-The standard-block toggle immediately requests a full redraw of open Reading views, including split panes; rendering may briefly show a loading indicator. Cached previews in editing panes are also invalidated, so returning to Reading view uses the current setting. Disabling the plugin also clears its canvases and refreshes Markdown preview caches so standard Mermaid can render again, including when returning from editing mode. The note text and other plugins’ registrations are preserved. Explicit OFF values are saved; missing or invalid values default to ON.
+The standard-block toggle immediately updates all open Live Preview editors and requests a full redraw of open Reading views, including split panes; rendering may briefly show a loading indicator. Cached previews in editing panes are also invalidated, so returning to Reading view uses the current setting. Disabling the plugin also clears its canvases and refreshes Markdown preview caches so standard Mermaid can render again, including when returning from editing mode. The note text and other plugins’ registrations are preserved. Explicit OFF values are saved; missing or invalid values default to ON.
 
 Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In very narrow panes, padding is reduced to leave room for content. Legacy `maxHeight` settings migrate to canvas height.
 
@@ -138,7 +148,8 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 
 ## Known limitations and troubleshooting
 
-- **Reading view is supported; Live Preview is not supported.** Standard `mermaid` in Live Preview uses Obsidian’s separate editor rendering path. Dedicated blocks may appear there, but that does not establish Live Preview support.
+- Live Preview uses a public CM6 StateField with block replacements, separately from Reading view. Closed backtick/tilde `mermaid` fences are recognized through the editor’s syntax tree; unknown/incomplete syntax trees, unclosed fences, extra language parameters and quote/callout prefixes stay on the host path. Nested list/container fences are not verified. Parsing may catch up after scrolling in a large note.
+- Synthetic desktop notes were checked in Obsidian 1.14.4: Flowchart/Sequence native rendering, Class single-SVG fallback, standard ON/OFF with dedicated blocks independent, source editing, Undo/Redo, Japanese IME composition and confirmation, Source/Live Preview transitions, Light/Dark, multiple diagrams, two Live Preview panes, scrolling, resizing and plugin disable/re-enable. Reading view continued rendering in a neighboring pane. This does not establish compatibility with every OS input method or third-party plugin; the 1.14.4+ desktop requirement remains.
 - Standard-block rendering uses an ordered Markdown postprocessor and leaves Obsidian’s renderer and other plugins’ registrations intact. Third-party Mermaid plugin compatibility has not been verified in Obsidian; use the OFF setting and dedicated blocks when combining renderers.
 - Mobile has not been tested. The browser-compatible code does not establish mobile compatibility.
 - Class/ER/State fall back to SVG with Mermaid 11.17.2 and converter 2.2.2. This secure dependency combination is preferred over downgrading Mermaid for conversion fidelity.
@@ -148,7 +159,7 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 - Resource-capable source is not supported, including benign extended node metadata, `properties`/`details` keywords, URL text, backslash escapes and entity syntax. Refusal happens before conversion and does not affect other diagrams.
 - The bundle includes diagram renderers and fonts and is relatively large.
 
-If nothing appears, check the block language, plugin enablement and Reading view. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).
+If nothing appears, check the block language, plugin enablement, the standard-block setting and Reading view/Live Preview. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).
 
 Disable the plugin to stop rendering; your Mermaid source remains in the note. To roll back manually, replace all three runtime files with files from the same earlier release and restart Obsidian.
 
@@ -166,7 +177,7 @@ npm run build
 npm run test:browser
 ```
 
-The output is `dist/mermaid-excalidraw-renderer/`. Local browser tests use Google Chrome; for Chromium run `npx playwright install chromium` followed by `PLAYWRIGHT_CHANNEL=chromium npm run test:browser`. Browser tests exercise the actual production bundle with a mocked Obsidian host. Native-host and mobile testing are separate checks.
+The output is `dist/mermaid-excalidraw-renderer/`. Local browser tests use Google Chrome; for Chromium run `npx playwright install chromium` followed by `PLAYWRIGHT_CHANNEL=chromium npm run test:browser`. Browser tests exercise the actual production bundle with a mocked Obsidian host, including real CM6 EditorViews, source edits, Undo/Redo, composition events, settings/mode changes and disposal. Composition events do not prove OS IME behavior. Native-host and mobile testing are separate checks.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [release readiness](RELEASE_READINESS.md), [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md).
 

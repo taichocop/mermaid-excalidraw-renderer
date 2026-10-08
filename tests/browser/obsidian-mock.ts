@@ -1,4 +1,11 @@
 import type { PluginSettings } from "../../src/types";
+import { StateEffect, StateField, type Extension } from "@codemirror/state";
+
+export const livePreviewMode = StateEffect.define<boolean>();
+export const editorLivePreviewField = StateField.define<boolean>({
+  create: () => true,
+  update: (value, tr) => tr.effects.reduce((current, effect) => effect.is(livePreviewMode) ? effect.value : current, value),
+});
 
 export class MarkdownRenderChild {
   private loaded = false;
@@ -64,6 +71,16 @@ export class MarkdownView {
 }
 
 export class Plugin {
+  editorExtensions: Extension[] = [];
+  editorExtensionsChanged: () => void = () => {};
+  registerEditorExtension(extension: Extension) {
+    this.editorExtensions.push(extension);
+    this.editorExtensionsChanged();
+    this.register(() => {
+      this.editorExtensions = this.editorExtensions.filter((entry) => entry !== extension);
+      this.editorExtensionsChanged();
+    });
+  }
   processors = new Map<string, Processor>();
   events: (() => void)[] = [];
   private cleanups: (() => void)[] = [];
@@ -89,10 +106,12 @@ export class Plugin {
     if (MarkdownPreviewRenderer.codeBlockProcessors.has(language)) throw new Error(`Code block postprocessor for language ${language} is already registered`);
     MarkdownPreviewRenderer.codeBlockProcessors.set(language, handler);
     this.processors.set(language, handler);
+    this.editorExtensionsChanged();
     this.register(() => {
       MarkdownPreviewRenderer.codeBlockProcessors.delete(language);
       this.processors.delete(language);
       MarkdownPreviewRenderer.unregisterPostProcessor(processor);
+      this.editorExtensionsChanged();
     });
     return processor;
   }

@@ -35,3 +35,9 @@
   color: var(--text-normal, #333);
   background: transparent;
 }
+
+/* Block-widget height must match the CM6 estimate (no collapsing margins). */
+.mermaid-excalidraw-editor {
+  margin-block: 0;
+  box-sizing: border-box;
+}
