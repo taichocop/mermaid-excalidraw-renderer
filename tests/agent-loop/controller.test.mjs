@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { InteractiveHandoff } from '../../scripts/agent-loop/interactive-handoff.mjs';
 import { AgentLoop } from '../../scripts/agent-loop/service.mjs';
 import { CODEX_IDENTITY, initialState, hash } from '../../scripts/agent-loop/core.mjs';
 const sha = 'a'.repeat(40), next = 'b'.repeat(40);
@@ -38,7 +41,7 @@ class FakeGitHub {
   async addComment(number, body) { this.posts.push(body); return { id: this.posts.length }; }
   async resolveThread(id) { this.threadsData.find(thread => thread.id === id).isResolved = true; }
   async ciData() { return { workflowId: 42, ignoredRunIds: [], required: [], checks: [], statuses: [], runs: [{
-    id: 10, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: this.pr.head.sha,
+    pull_requests: [{ number: this.pr.number }], id: 10, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: this.pr.head.sha,
     event: 'pull_request', status: this.green ? 'completed' : 'in_progress', conclusion: this.green ? 'success' : null,
   }] }; }
   addFinding() {
@@ -58,7 +61,7 @@ test('completed latest review with finding enters FIXING; no implementation whil
   const { api, loop } = setup(); api.addFinding();
   const plan = await loop.plan(1);
   const fixed = await loop.decide(plan, classify(plan, 'actionable'));
-  assert.equal(fixed.mode, 'fix'); assert.equal(api.record.value.state, 'FIXING');
+  assert.equal(fixed.mode, 'fix'); assert.equal(fixed.state, 'FIXING'); assert.equal(api.record.value.state, 'FIXING');
   api.phase = 'running'; const waiting = await loop.plan(1);
   assert.equal(waiting.mode, 'skip'); assert.equal(waiting.state, 'WAITING_FOR_REVIEW');
   assert.equal(api.posts.length, 0);
@@ -174,4 +177,49 @@ test('initial implementation exposes IMPLEMENTING/VALIDATING/PUSHING without cou
   api.pr.head.sha = next;
   const waiting = await loop.plan(1);
   assert.equal(waiting.state, 'WAITING_FOR_REVIEW_START'); assert.equal(api.record.value.iteration, 0);
+});
+
+function interactive(t, loop, checkout) {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-handoff-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return new InteractiveHandoff(loop, dir, () => checkout);
+}
+const evidence = headSha => ({ headSha, lint: true, typecheck: true, tests: true, build: true, browser: true });
+test('interactive handoff records clean analysis and validation, then monitor resumes READY', async t => {
+  const { api, loop } = setup();
+  const h = interactive(t, loop, { sha, parent: 'base', clean: true });
+  h.snapshot(await loop.plan(1, { observeOnly: true }));
+  await h.decide({ findings: classify(h.read('plan.json')) });
+  await h.validated(evidence(sha));
+  assert.equal(await h.ready(), 'READY_TO_MERGE');
+  assert.equal(api.record.value.lastValidationSha, sha);
+  assert.equal((await loop.plan(1, { observeOnly: true })).mode, 'ready');
+});
+test('interactive handoff reserves exact repair and records one iteration only after remote push', async t => {
+  const { api, loop } = setup(); api.addFinding();
+  const checkout = { sha: next, parent: sha, clean: true }, h = interactive(t, loop, checkout);
+  h.snapshot(await loop.plan(1, { observeOnly: true }));
+  await h.decide({ findings: classify(h.read('plan.json'), 'actionable') });
+  await h.validated(evidence(next));
+  await assert.rejects(h.ready(), /new HEAD review/);
+  await h.reservePush(); assert.equal(api.record.value.iteration, 0);
+  await assert.rejects(h.published(), /Published HEAD/);
+  api.pr.head.sha = next;
+  const saved = await h.published(); assert.equal(saved.iteration, 1); assert.equal(saved.state, 'WAITING_FOR_REVIEW_START');
+  await assert.rejects(h.published(), /reservation/); assert.equal(api.record.value.iteration, 1);
+});
+test('interactive handoff rejects stale, dirty, or unvalidated checkout and enforces repair limit', async t => {
+  const { api, loop } = setup(); api.addFinding();
+  const checkout = { sha: next, parent: sha, clean: true }, h = interactive(t, loop, checkout);
+  h.snapshot(await loop.plan(1, { observeOnly: true }));
+  await h.decide({ findings: classify(h.read('plan.json'), 'actionable') });
+  await assert.rejects(h.validated({ ...evidence(next), build: false }), /validation evidence/);
+  checkout.clean = false; await assert.rejects(h.validated(evidence(next)), /checkout/);
+  checkout.clean = true; await h.validated(evidence(next));
+  api.comments[0].body = 'New body'; api.threadsData[0].comments.nodes[0].body = 'New body';
+  await assert.rejects(h.reservePush(), /STALE_PLAN/);
+  api.record.value.iteration = 5;
+  h.snapshot(await loop.plan(1, { observeOnly: true }));
+  assert.equal((await h.decide({ findings: classify(h.read('plan.json'), 'actionable') })).mode, 'skip');
+  assert.equal(api.record.value.state, 'LOOP_LIMIT_REACHED');
 });

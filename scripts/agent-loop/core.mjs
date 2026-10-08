@@ -96,9 +96,10 @@ export function parseAnalysis(result, sources) {
   }
   return result.findings;
 }
-export function ciGreen(runs, checks, statuses, headSha, workflowId, ignoredRunIds = [], required = []) {
+export function ciGreen(runs, checks, statuses, headSha, workflowId, ignoredRunIds = [], required = [], prNumber) {
   const validation = runs.filter(run => (workflowId ? run.workflow_id === workflowId
-    : run.path?.split('@')[0] === '.github/workflows/ci.yml') && run.head_sha === headSha && run.event === 'pull_request')
+    : run.path?.split('@')[0] === '.github/workflows/ci.yml') && run.head_sha === headSha && run.event === 'pull_request'
+    && Number.isSafeInteger(prNumber) && run.pull_requests?.some(pr => pr.number === prNumber))
     .sort((a, b) => b.id - a.id)[0];
   if (validation?.status !== 'completed' || validation.conclusion !== 'success') return false;
   const latest = new Map();

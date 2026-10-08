@@ -71,11 +71,11 @@ fresh validation runner (API key/push credentialなし)
 fresh publishing runner (PR code/package scriptsを実行しない)
 ```
 
-analysisとfixのdrop-sudo Actionを同じrunnerで繰り返さない。Action後にテスト・commit・pushしない。workspace、background process、Git設定を次runnerへコピーせず、構造化結果とpatchだけを渡す。
+analysisとfixのdrop-sudo Actionを同じrunnerで繰り返さない。Action後にテスト・commit・pushしない。workspace、background process、Git設定を次runnerへコピーせず、構造化結果とpatchだけを渡す。API keyを受け取るCodex runnerでは事前のnpm ciやPR lifecycle scriptを実行しない。package installation/build/testはfresh validation runnerだけで行う。
 
 validationは指定HEADへpatchを適用し、lint/typecheck/tests/build/browserを実行する。変更が検証中に増えていないこととexact treeを確認する。publisherは名前ではなくimmutable artifact IDで元candidateとvalidation artifactを別々に再取得し、planとdigestを照合する。fresh checkoutへ元candidate patchを適用し、検証済みcanonical diffとtree SHAの両方を確認する。validation runnerが元candidateの内容を差し替えることはできない。PRコードを実行しないpublisherだけがpush tokenを受け取る。Git hooks/fsmonitor/user configを無効化し、親HEADを確認し、expected remote SHAのlease付きで1commitをpushする。
 
-workflow/controller/agent instructions/git設定等のprotected path変更は自動publishを拒否する。PR #1の制御コード変更は、このInteractiveの明示的な実装依頼として人間がレビュー可能なPRへ反映する。公開repoのfork PRは自動修正対象外。同repositoryのopen・non-draft・`agent-loop`付きPRのみ対象。
+patchはworkspaceへ適用する前に独立した仮indexへ適用し、rename検出を無効化したHEADとの差分から削除元・追加先の両方を検査する。numstatのdestinationだけに依存せず、workflow/controller/agent instructions/git設定等のprotected path変更は自動publishを拒否する。PR #1の制御コード変更は、このInteractiveの明示的な実装依頼として人間がレビュー可能なPRへ反映する。公開repoのfork PRは自動修正対象外。同repositoryのopen・non-draft・`agent-loop`付きPRのみ対象。
 
 ## Fingerprint / dedupe / stale plan
 
@@ -104,7 +104,32 @@ node scripts/agent-loop/interactive.mjs --pr=1 --interval=45
 node scripts/agent-loop/interactive.mjs --pr=1 --once --request-mode=automatic-only
 ```
 
-既存の`gh`ログインをメモリ内で利用し、認証値を表示・artifact保存しない。monitorは同じState/backend/fallbackを利用し、completed reviewのcontextを呼び出し元Codex sessionへ返す。sessionが分析→修正→検証→pushを行い、再びmonitorを呼び出す。monitor自体はmerge/tag/releaseを行わない。timeoutは待機状態を保持して終了する。最大5回のReview→Fix→Pushに達して指摘が残れば停止する。
+既存の`gh`ログインをメモリ内で利用し、認証値を表示・artifact保存しない。monitorは同じState/backend/fallbackを利用し、completed reviewの完全なplanをhandoff directoryへ保存して呼び出し元Codex sessionへ返す。sessionは以下の明示的なhandoffで分析・検証・push結果を同じStateへ保存し、再びmonitorを呼び出す。monitor自体はmerge/tag/releaseを行わない。timeoutは待機状態を保持して終了する。最大5回のReview→Fix→Pushに達して指摘が残れば停止する。
+
+### Interactive結果の引き継ぎ
+
+全コマンドで同じ`--handoff-dir`とPR番号を使用する。analysis fileは全source IDをactionable/resolved/informationalへ分類し、reasonを付けた`{"findings": [...]}`。monitorが保存したsnapshotを使い、decideも再取得したHEAD/fingerprintを検査する。
+
+```sh
+node scripts/agent-loop/interactive.mjs --pr=1 --handoff-dir=/tmp/agent-loop-interactive/pr-1
+node scripts/agent-loop/interactive.mjs --pr=1 --handoff-dir=/tmp/agent-loop-interactive/pr-1 --stage=decide --analysis-file=/tmp/agent-analysis.json
+```
+
+sessionが修正、lint/typecheck/tests/build/browser検証、local commitを済ませてから、検証結果をJSONへ記録する。`headSha`は検証したcommit full SHA。各checkはすべて`true`が必要。これはsession自身の検証報告であり、Production artifact attestationの代用にはしない。
+
+```json
+{"headSha":"<40 hex SHA>","lint":true,"typecheck":true,"tests":true,"build":true,"browser":true}
+```
+
+```sh
+node scripts/agent-loop/interactive.mjs --pr=1 --handoff-dir=/tmp/agent-loop-interactive/pr-1 --stage=validated --validation-file=/tmp/agent-validation-input.json
+node scripts/agent-loop/interactive.mjs --pr=1 --handoff-dir=/tmp/agent-loop-interactive/pr-1 --stage=reserve-push
+# sessionが出力された親SHAに対するleaseを指定して対象PR branchへgit pushする
+node scripts/agent-loop/interactive.mjs --pr=1 --handoff-dir=/tmp/agent-loop-interactive/pr-1 --stage=published
+# 最新HEADのreviewを再びmonitorする
+```
+
+validated/reserve-push/publishedはclean checkoutとexact commit SHAを確認する。fix commitは計画HEADの直接の子でなければ拒否する。reserve-pushが共通backendへ予約を保存し、publishedはremote HEAD一致後にiterationを一度だけ増やす。予約前のHEAD/context変更、検証後のcheckout変更、5回を超える修正は拒否する。指摘0の場合は同じHEADでvalidatedを保存し、`--stage=ready`でCI確認・processed fingerprint・lastValidationSha・ready labelを保存する。CI pendingなら以後のmonitor/reconcileで再評価できる。
 
 ## Iteration / recovery
 
@@ -120,7 +145,7 @@ push前にSHA・親SHA・context・次iterationを保存する。push成功後�
 - current HEAD === full reviewed HEAD、最新Codex Review completed。
 - unresolved actionable Codex findings 0。severityに依存せず全sourceを分類済み。
 - 同HEADのlint/typecheck/tests/build/browser検証成功、protected-path violationなし。
-- 同HEADのValidate plugin PR run成功、required/その他CI checks/statuses green。
+- 同HEADかつ対象PR番号に紐付くValidate plugin PR run成功、required/その他CI checks/statuses green。
 - iteration <= max。
 
 CI workflowは安定したworkflow IDで識別し、pathを使う場合は`@ref`を除去する。必要checkを取得できないprotected branchは不明をgreenにしない。CI pending/failureは`WAITING_FOR_CI`に保存する。ready snapshotのHEAD/fingerprint/CI/mergeability/label変更はagent-readyを削除して適切な状態へ戻す。完了summaryは同じ認定snapshotにつき1回だけ投稿する。
