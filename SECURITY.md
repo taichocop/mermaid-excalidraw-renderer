@@ -17,7 +17,7 @@ Include affected versions, OS/Obsidian version, a minimal sanitized reproduction
 - React displays error messages as text. The plugin never inserts source/error strings as raw HTML. Mermaid internally generates temporary DOM/SVG; its sanitizer and vulnerabilities remain relevant.
 - Fallback SVG is recolored using DOMParser and serialized as a data URL. The plugin does not reconstruct diagram geometry or insert the normalized XML into the host DOM.
 - Canvas is view-only, AI and embeddable features are disabled, and diagram link opening is prevented. No telemetry, ads, self-update, vault scanning or note mutation is implemented. Settings use loadData/saveData only.
-- JavaScript and fonts are bundled. Ordinary rendering works offline. Upstream Mermaid external-image features may request resources referenced by diagram text; diagram overrides of themeCSS and dompurifyConfig are blocked, but these are not an allowlisted network API. Do not treat untrusted diagrams as guaranteed network-isolated. README discloses this behavior.
+- JavaScript and fonts are bundled. Ordinary rendering works offline. Upstream Mermaid external-image features may request resources referenced by diagram text; diagram overrides of themeCSS and dompurifyConfig are blocked. External-image requests are not restricted to an allowlist. Do not treat untrusted diagrams as guaranteed network-isolated. README discloses this behavior.
 - No Node/Electron modules are imported by runtime source. Build/test/maintainer scripts use Node and GitHub APIs and are not distributed as runtime dependencies.
 
 ## Dependency and release checks

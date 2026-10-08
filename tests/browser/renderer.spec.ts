@@ -15,6 +15,13 @@ async function scenePixels(page: Page) {
     const context = node.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("No canvas context");
     const { width, height } = node;
+    // Hidden/just-revealed panes can briefly have a 0px backing canvas.
+    // Return a non-rendered sample so expect.poll waits for real ink instead
+    // of throwing IndexSizeError before Excalidraw finishes its resize.
+    if (width === 0 || height === 0) return {
+      background: [0, 0, 0], ink: 0, colored: 0, left: 0, right: 0, top: 0, bottom: 0,
+      width: 0, height: 0, filter: getComputedStyle(node).filter,
+    };
     const pixels = context.getImageData(0, 0, width, height).data;
     const background = [pixels[0], pixels[1], pixels[2]];
     let ink = 0, colored = 0, left = width, right = 0, top = height, bottom = 0;
