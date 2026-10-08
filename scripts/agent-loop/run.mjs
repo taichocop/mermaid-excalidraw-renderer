@@ -44,7 +44,7 @@ async function dispatch() {
       if (!pr.labels.some(label => label.name === 'agent-loop')) continue;
       const record = await api.loadState(pr.number);
       if (!record.value || ['WAITING_FOR_REVIEW_START', 'WAITING_FOR_REVIEW', 'WAITING_FOR_CI',
-        'PROCESSING_REVIEW', 'FIXING', 'VALIDATING', 'PUSHING', 'READY_TO_MERGE', 'FAILED'].includes(record.value.state)) prs.push(pr.number);
+        'PROCESSING_REVIEW', 'FIXING', 'VALIDATING', 'PUSHING', 'READY_TO_MERGE', 'FAILED', 'LOOP_LIMIT_REACHED'].includes(record.value.state)) prs.push(pr.number);
     }
   } else {
     if (name === 'workflow_run' && event.workflow_run.path?.split('@')[0]?.includes('agent-loop')) return;
@@ -127,8 +127,11 @@ function applyCandidate(value) {
     git(['apply', '--cached', patchPath], { env });
     const paths = git(['diff', '--cached', '--no-renames', '--name-only', '-z', 'HEAD'], { env })
       .split('\0').filter(Boolean);
+    const entries = paths.length ? git(['ls-files', '--stage', '-z', '--', ...paths], { env }).split('\0').filter(Boolean) : [];
     if (paths.some(path => protectedPath(path) || path.startsWith('/') || path.split('/').includes('..') || path.startsWith('.git/'))
-      || /^(?:new file mode|new mode) 120000$/m.test(value.patch)) throw new Error('protected-path violation');
+      || entries.some(entry => !/^(100644|100755) /.test(entry))) {
+      throw Object.assign(new Error('protected-path violation: unsupported path or file mode'), { code: 'PROTECTED_PATH' });
+    }
   } finally { rmSync(scratch, { recursive: true, force: true }); }
   git(['apply', '--check', '--index', patchPath]);
   git(['apply', '--index', patchPath]);
@@ -168,8 +171,13 @@ async function publish() {
   } else output('state', await loop.ready(plan, { validated: true }));
 }
 async function certify() { output('state', await loop.ready(read('plan.json'))); }
-async function failed() { await loop.fail(number, 'Workflow failed; inspect artifacts and reconcile'); }
+async function failed() { await loop.fail(number, env.FAILURE_KIND === 'protected-path'
+  ? 'protected-path violation; manual correction required' : 'Workflow failed; inspect artifacts and reconcile'); }
 async function implementation() { output('state', (await loop.implementation(number, env.IMPLEMENTATION_PHASE)).state); }
 const commands = { dispatch, plan, decide, candidate, materialize, attest, publish, certify, failed, implementation };
 if (!commands[process.argv[2]]) throw new Error('Unknown agent-loop command');
-await commands[process.argv[2]]();
+try { await commands[process.argv[2]](); }
+catch (error) {
+  if (error.code === 'PROTECTED_PATH') output('failure_kind', 'protected-path');
+  throw error;
+}

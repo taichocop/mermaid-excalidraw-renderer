@@ -26,6 +26,7 @@ export class GitHub {
     for (let page = 1; page <= 100; page++) {
       const value = await this.repo(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
       const rows = key ? value[key] : value;
+      if (!Array.isArray(rows)) throw new Error('Expected a paginated GitHub array');
       items.push(...rows);
       if (rows.length < 100) return items;
     }
@@ -105,7 +106,7 @@ export class GitHub {
     const [runs, checks, statuses, branch] = await Promise.all([
       this.pages(`/actions/runs?head_sha=${pr.head.sha}`, 'workflow_runs'),
       this.pages(`/commits/${pr.head.sha}/check-runs?filter=latest`, 'check_runs'),
-      this.pages(`/commits/${pr.head.sha}/status`, 'statuses'),
+      this.pages(`/commits/${pr.head.sha}/statuses`),
       this.repo(`/branches/${encodeURIComponent(pr.base.ref)}`),
     ]);
     let required = [];

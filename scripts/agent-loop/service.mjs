@@ -39,6 +39,10 @@ export class AgentLoop {
     }
     state = onHead(state, pr.head.sha, this.now());
     const context = await this.context(pr);
+    if (state.state === 'BLOCKED' && state.blockedContext === context.fingerprint) {
+      await this.api.removeReady(number);
+      return { mode: 'skip', state: 'BLOCKED', pr, context };
+    }
     const changed = state.reviewFingerprint && state.reviewFingerprint !== context.fingerprint;
     if (changed || state.state !== 'READY_TO_MERGE' || context.phase !== 'completed') await this.api.removeReady(number);
     const decision = lifecycleDecision(state, context, this.max);
@@ -196,7 +200,8 @@ export class AgentLoop {
   async fail(number, reason) {
     const { pr, record, state } = await this.load(number);
     await this.api.removeReady(number);
-    await this.save(record, { ...state, lease: null, state: state.pendingPush ? 'PUSHING'
+    await this.save(record, { ...state, lease: null, blockedContext: reason?.includes('protected') ? state.reviewFingerprint : null,
+      state: state.pendingPush ? 'PUSHING'
       : reason?.includes('protected') ? 'BLOCKED' : 'FAILED', reason }, pr);
   }
 }

@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: write
       pull-requests: write
       issues: write
@@ -210,6 +211,7 @@ jobs:
           path: loop/candidate.json
   validate:
     outputs:
+      failure_kind: ${{ steps.materialize.outputs.failure_kind }}
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     needs: [plan, candidate]
     runs-on: ubuntu-latest
@@ -233,7 +235,8 @@ jobs:
           artifact-ids: ${{ needs.candidate.outputs.artifact_id }}
           merge-multiple: true
           path: loop/
-      - run: node controller/scripts/agent-loop/run.mjs materialize
+      - id: materialize
+        run: node controller/scripts/agent-loop/run.mjs materialize
       - name: Validate candidate on a fresh runner
         working-directory: work
         env:
@@ -255,6 +258,8 @@ jobs:
           name: loop-validated
           path: loop/validated.json
   publish:
+    outputs:
+      failure_kind: ${{ steps.publish.outputs.failure_kind }}
     needs: [plan, candidate, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -290,7 +295,8 @@ jobs:
           merge-multiple: true
           path: loop/
       # No package scripts or PR code run on this credential-bearing runner.
-      - run: node controller/scripts/agent-loop/run.mjs publish
+      - id: publish
+        run: node controller/scripts/agent-loop/run.mjs publish
         env:
           GH_TOKEN: ${{ github.token }}
           AGENT_LOOP_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
@@ -343,4 +349,5 @@ jobs:
           node-version: '22'
       - run: node controller/scripts/agent-loop/run.mjs failed
         env:
+          FAILURE_KIND: ${{ needs.validate.outputs.failure_kind || needs.publish.outputs.failure_kind }}
           GH_TOKEN: ${{ github.token }}

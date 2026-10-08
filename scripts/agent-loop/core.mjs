@@ -9,7 +9,7 @@ export const initialState = () => ({ schemaVersion: 2, state: 'IDLE', iteration:
   reviewedHeadSha: null, reviewId: null, reviewFingerprint: null, processedContexts: [],
   lastProcessedReviewId: null, lastProcessedHeadSha: null, lastProcessedFindingIds: [],
   reviewRequestHeadSha: null, reviewRequestAttempts: 0, reviewRequestAt: null,
-  reviewStartAt: null, lastValidationSha: null, pendingPush: null, lease: null, updatedAt: null });
+  reviewStartAt: null, lastValidationSha: null, pendingPush: null, lease: null, blockedContext: null, updatedAt: null });
 
 export function migrateState(old = {}) {
   const map = { ANALYZING: 'PROCESSING_REVIEW', PUBLISHING: 'PUSHING', READY_FOR_HUMAN: 'WAITING_FOR_REVIEW_START',
@@ -43,7 +43,7 @@ export function onHead(state, sha, now = new Date().toISOString()) {
   if (state.headSha === sha) return state.reviewStartAt ? state : { ...state, reviewStartAt: now, reviewRequestHeadSha: sha };
   return { ...state, headSha: sha, reviewedHeadSha: null, reviewId: null, reviewFingerprint: null,
     lastValidationSha: null, reviewStartAt: now, reviewRequestHeadSha: sha,
-    reviewRequestAttempts: 0, reviewRequestAt: null, pendingPush: null, lease: null,
+    reviewRequestAttempts: 0, reviewRequestAt: null, pendingPush: null, lease: null, blockedContext: null,
     state: state.state === 'LOOP_LIMIT_REACHED' ? state.state : 'WAITING_FOR_REVIEW_START' };
 }
 
@@ -64,9 +64,8 @@ export function lifecycleDecision(state, context, max = 5) {
   if (context.reviewedHeadSha !== state.headSha || context.phase === 'not-started') return 'wait-start';
   if (context.phase === 'running') return 'wait-review';
   if (context.phase !== 'completed') return 'wait-start';
-  if (state.state === 'LOOP_LIMIT_REACHED') return 'limit';
   const key = `${context.reviewId}:${context.headSha}:${context.fingerprint}`;
-  if (state.processedContexts.includes(key)) return 'duplicate';
+  if (state.processedContexts.includes(key)) return state.state === 'LOOP_LIMIT_REACHED' ? 'limit' : 'duplicate';
   return state.iteration >= max ? 'analyze-only' : 'analyze';
 }
 export const contextKey = context => `${context.reviewId}:${context.headSha}:${context.fingerprint}`;
