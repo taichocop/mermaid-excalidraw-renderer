@@ -22,8 +22,8 @@ async function artifacts(t) {
   return { dir, assets: await inspectReleaseAssets(dir) };
 }
 
-function github(assets, { draft = true, absent = false } = {}) {
-  let release = absent ? undefined : { id: 1, tag_name: tag, draft, target_commitish: commit };
+function github(assets, { draft = true, absent = false, releaseId = 1 } = {}) {
+  let release = absent ? undefined : { id: releaseId, tag_name: tag, draft, target_commitish: commit };
   let remote = assets.map((asset, i) => ({ id: i + 10, name: asset.name, size: asset.size, digest: asset.digest, state: 'uploaded' }));
   let nextId = 100;
   let reads = 0;
@@ -58,7 +58,12 @@ function github(assets, { draft = true, absent = false } = {}) {
         digest: client.badDigest ? `sha256:${'0'.repeat(64)}` : asset.digest });
     },
     updateDraft: async (id, metadata) => {
-      mutations.push({ type: 'edit', id }); release = { ...release, ...metadata };
+      mutations.push({ type: 'edit', id, metadata }); release = { ...release, ...metadata };
+      // Reproduce GitHub's observed draft tag normalization when PATCH omits tag_name.
+      release.tag_name = metadata.tag_name ?? 'untagged-f8c396541679ec809ff3';
+      if (client.changeTagOnUpdate) release.tag_name = 'untagged-f8c396541679ec809ff3';
+      if (client.changeIdOnUpdate) release.id++;
+      if (client.publishOnUpdate) release.draft = false;
       if (client.unexpectedAsset) remote.push({ id: nextId++, name: 'unexpected.zip' });
     },
   };
@@ -72,6 +77,31 @@ test('draft with the exact validated assets passes without deleting matching ass
   await refresh(client, assets);
   assert.deepEqual(client.mutations.map((item) => item.type), ['edit']);
   assert.deepEqual(client.remote().map((asset) => asset.name).sort(), [...RELEASE_ASSET_NAMES]);
+});
+
+test('metadata PATCH preserves the approved tag and original draft ID with matching assets', async (t) => {
+  const { assets } = await artifacts(t);
+  const client = github(assets, { releaseId: 406265576 });
+  const originalAssets = structuredClone(client.remote());
+  const id = await refresh(client, assets);
+  assert.equal(id, 406265576);
+  assert.deepEqual(client.mutations, [{ type: 'edit', id: 406265576,
+    metadata: { tag_name: tag, target_commitish: commit, name: 'Test release', body: 'Test notes' } }]);
+  assert.deepEqual(client.remote(), originalAssets);
+});
+
+test('tag, identity or published-state changes after metadata PATCH still fail closed', async (t) => {
+  const { assets } = await artifacts(t);
+  for (const [flag, message] of [
+    ['changeTagOnUpdate', /Release tag changed/],
+    ['changeIdOnUpdate', /Release identity changed/],
+    ['publishOnUpdate', /Published releases cannot be changed/],
+  ]) {
+    const client = github(assets, { releaseId: 406265576 });
+    client[flag] = true;
+    await assert.rejects(refresh(client, assets), message);
+    assert.deepEqual(client.mutations.map(({ type, id }) => ({ type, id })), [{ type: 'edit', id: 406265576 }]);
+  }
 });
 
 test('draft removes obsolete assets and replaces files with stale hashes', async (t) => {
