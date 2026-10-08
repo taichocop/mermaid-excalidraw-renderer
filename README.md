@@ -25,6 +25,8 @@ This release is being prepared for submission and is **not yet listed**. After a
 
 ### Manual installation
 
+Download attachments from a published release; draft releases are not publicly downloadable.
+
 1. Download `main.js`, `manifest.json` and `styles.css` from a [GitHub release](https://github.com/taichocop/mermaid-excalidraw-renderer/releases). Use the attached files, not the source-code ZIP.
 2. Create `<vault>/<config-folder>/plugins/mermaid-excalidraw-renderer/`. The configuration folder is normally `.obsidian`, but may be customized.
 3. Put all three files in that folder, restart Obsidian, and enable **Mermaid Excalidraw Renderer** under **Settings → Community plugins**.
