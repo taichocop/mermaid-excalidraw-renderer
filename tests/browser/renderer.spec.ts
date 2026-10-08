@@ -15,6 +15,13 @@ async function scenePixels(page: Page) {
     const context = node.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("No canvas context");
     const { width, height } = node;
+    // Hidden/just-revealed panes can briefly have a 0px backing canvas.
+    // Return a non-rendered sample so expect.poll waits for real ink instead
+    // of throwing IndexSizeError before Excalidraw finishes its resize.
+    if (width === 0 || height === 0) return {
+      background: [0, 0, 0], ink: 0, colored: 0, left: 0, right: 0, top: 0, bottom: 0,
+      width: 0, height: 0, filter: getComputedStyle(node).filter,
+    };
     const pixels = context.getImageData(0, 0, width, height).data;
     const background = [pixels[0], pixels[1], pixels[2]];
     let ink = 0, colored = 0, left = width, right = 0, top = height, bottom = 0;
@@ -43,6 +50,12 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
       || /warning/i.test(message.text())) errors.push(message.text());
   });
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const remoteRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/^https?:/.test(request.url()) && !request.url().startsWith("http://127.0.0.1:")) {
+      remoteRequests.push(request.url());
+    }
+  });
   expect(await page.evaluate(() => window.harness.registeredLanguages())).toEqual(["mermaid-excalidraw"]);
   await page.evaluate(() => window.harness.mountSamples(["flowchart", "sequence", "class", "er", "state", "gantt", "pie", "timeline"]));
   await expect(page.locator('[data-state="ready"]')).toHaveCount(8);
@@ -66,12 +79,13 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
   await expect.poll(async () => (await scenePixels(page)).every((scene) => scene.ink > 100
     && scene.background.every((value) => value === 255))).toBe(true);
   expect(errors).toEqual([]);
+  expect(remoteRequests).toEqual([]);
 });
 
 test("Appearance controls persist and redraw roughness 0/1/2 on an open diagram", async ({ page }) => {
   await page.evaluate(() => { window.harness.mountSamples(["flowchart"]); window.harness.openSettings(); });
   await expect.poll(async () => (await scenePixels(page))[0]?.ink ?? 0).toBeGreaterThan(100);
-  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Font size", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Theme", exact: true })).toHaveValue("follow-obsidian");
   const images = new Set<string>();
   for (const roughness of [0, 1, 2]) {

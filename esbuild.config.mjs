@@ -1,6 +1,6 @@
 import * as esbuild from "esbuild";
 import { builtinModules } from "node:module";
-import { copyFile, mkdir, watch } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile, watch } from "node:fs/promises";
 import { buildStyles, inlineExcalidrawFonts } from "./scripts/build-assets.mjs";
 import { bundledNotices } from "./scripts/build-notices.mjs";
 
@@ -27,9 +27,11 @@ const context = await esbuild.context({
 
 if (production) {
   try {
-    await context.rebuild();
+    const result = await context.rebuild();
+    await rm("dist/mermaid-excalidraw-renderer", { recursive: true, force: true });
     await mkdir("dist/mermaid-excalidraw-renderer", { recursive: true });
-    for (const file of ["main.js", "manifest.json", "styles.css", "THIRD_PARTY_NOTICES.txt"]) {
+    await writeFile("dist/build-meta.json", JSON.stringify(result.metafile, null, 2));
+    for (const file of ["main.js", "manifest.json", "styles.css", "THIRD_PARTY_NOTICES.txt", "LICENSE"]) {
       await copyFile(file, `dist/mermaid-excalidraw-renderer/${file}`);
     }
   } finally { await context.dispose(); }

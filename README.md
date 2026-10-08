@@ -1,211 +1,141 @@
 # Mermaid Excalidraw Renderer
 
-Obsidianの `mermaid-excalidraw` コードブロックをExcalidrawの手書き風の図として表示するCommunity Pluginです。他のExcalidrawプラグインには依存しません。標準の `mermaid` ブロックはそのまま利用できます。
+Render Mermaid diagrams in an Excalidraw-style view directly inside your Obsidian notes.
+
+Write Mermaid text in a `mermaid-excalidraw` code block and open **Reading view**. The plugin works independently of the Excalidraw community plugin and leaves standard `mermaid` blocks unchanged.
+
+## Features
+
+- Hand-drawn Flowchart and Sequence diagrams, with pan, zoom and automatic fitting.
+- Class, ER and State diagrams displayed using Mermaid SVG fallback in the current release.
+- SVG fallback for other supported Mermaid types, including Gantt, Pie and Timeline.
+- Light/Dark theme following, with black or white text and lines chosen for background contrast.
+- Font size, roughness, canvas height and padding controls.
+- Multiple independent diagrams per note and safe inline errors for invalid input.
+
+SVG fallback preserves Mermaid geometry: it does not turn every diagram type into hand-drawn Excalidraw elements. Roughness and font-size changes may not affect fallback images in the same way as native diagrams.
 
 ## Installation
 
-開発にはNode.js 22.13以上の22系、または24以上とnpmが必要です。`.nvmrc` は22系を指定しています。
+**Requirements:** Obsidian **1.14.4 or newer**, desktop app. Mobile is untested and is not supported in this first release.
 
-```sh
-npm install
-npm run build
-```
+### Community directory
 
-生成される `dist/mermaid-excalidraw-renderer/` フォルダーをVaultの `.obsidian/plugins/` にコピーしてください。次の3ファイルがあれば動作します。
+This release is being prepared for submission and is **not yet listed**. After approval, open **Settings → Community plugins → Browse**, search for **Mermaid Excalidraw Renderer**, install it and enable it.
 
-```text
-.obsidian/plugins/mermaid-excalidraw-renderer/
-├── main.js
-├── manifest.json
-└── styles.css
-```
+### Manual installation
 
-Obsidianの「設定 → コミュニティプラグイン」でMermaid Excalidraw Rendererを有効にします。現在は手動導入版で、Community Plugin一覧への登録はまだ行っていません。
+1. Download `main.js`, `manifest.json` and `styles.css` from a [GitHub release](https://github.com/taichocop/mermaid-excalidraw-renderer/releases). Use the attached files, not the source-code ZIP.
+2. Create `<vault>/<config-folder>/plugins/mermaid-excalidraw-renderer/`. The configuration folder is normally `.obsidian`, but may be customized.
+3. Put all three files in that folder, restart Obsidian, and enable **Mermaid Excalidraw Renderer** under **Settings → Community plugins**.
 
-最低Obsidianバージョンは1.5.0です。使用するコードブロックprocessor、`MarkdownRenderChild`、設定保存、workspaceの `css-change` は公開APIです。**MVPはデスクトップ専用**です。大きなCanvas・同梱フォントのメモリ使用量とモバイルWebViewの挙動を未検証のため、`isDesktopOnly: true` としています。
+Optional `SHA256SUMS.txt`, `LICENSE` and `THIRD_PARTY_NOTICES.txt` attachments allow you to verify downloads and inspect licenses. Licenses are also embedded in `main.js`, so the normal three-file installation includes the required notices.
 
 ## Usage
 
-ノートに `mermaid-excalidraw` コードブロックを記述してReading Viewで開きます。
+Copy this complete block into a note, then switch to Reading view:
 
 ````markdown
 ```mermaid-excalidraw
 flowchart LR
-    User --> Obsidian
-    Obsidian --> Mermaid
-    Mermaid --> Excalidraw
+    A[Idea] --> B[Mermaid]
+    B --> C[Excalidraw]
 ```
 ````
 
-表示はExcalidrawの公開 `viewModeEnabled` と `zenModeEnabled` を使っています。編集・保存・画像挿入・AI機能は無効で、パン・ズームは使用できます。空のMainMenuを渡して既定の編集メニューを置き換えます。Excalidraw自身のメニューボタンなど、公開APIで除去できない枠は残ります。図内のリンクは開きません。
+Edit the source text to change the diagram. The view supports panning and zooming; editing drawings, saving Excalidraw files and exporting images are not included.
 
-ObsidianのLight/Dark変更に追従します。キャンバスはデフォルトで高さ600px・幅100%です。設定した高さと余白の中に全体が収まるよう、表示直後とペインのサイズ変更時に自動フィットします。小さな図は100%を超えて拡大しません。
-
-設定画面では次の項目を変更できます。開いている図にも反映し、`loadData()` / `saveData()` で永続化します。
-
-| 設定 | デフォルト | 範囲 |
-| --- | ---: | ---: |
-| Font size | 20px | 12–48px |
-| Roughness | 1（Architect） | 0 = Clean / 1 = Architect / 2 = Artist |
-| Canvas height | 600px | 240–1200px |
-| Canvas padding | 32px | 16–128px |
-| Theme | Follow Obsidian | 現在は自動追従のみ |
-
-Appearanceセクションから変更できます。従来の `maxHeight` は設定データとして保持し、`canvasHeight` がまだないインストールでは新しい高さへ移行します（240–1200pxに補正）。横幅はノート幅に自然に追従するため固定幅設定は追加していません。
-
-Excalidraw 0.18.1の要素共通型では `roughness: number` と定義されています。インストール済みUIの値0・1・2を使用し、表示名は本プラグイン用に上表の名称としています（Excalidraw自身の名称はArchitect / Artist / Cartoonist）。変換後に公開 `newElementWith()` でroughness・strokeColor・fillを調整します。text/imageにも共通プロパティはありますが、文字の形やSVG画像の線をroughnessで手書き化することはできません。
-
-テーマ判定には各ノートのdocumentの `body.theme-dark`、背景には `--background-primary` を使ったコンテナの実際のCSS背景色を使用します。背景の相対輝度から黒・白それぞれのコントラストを比較し、読みやすい方を文字・線・矢印・図形の境界線に選びます。図形のfillは背景色へ揃えます。カスタムテーマでDark設定なのに背景が明るい場合も、背景に対して適切な文字色になります。
-
-テーマの自動追従はプラグイン単位で登録する公開 `workspace.css-change` イベント1つで行い、diagramごとのMutationObserverは作りません。同じLight/Dark内でCSS背景色だけが変わった場合にも追従します。ExcalidrawのDarkキャンバスの既定色反転は、このプラグインのキャンバス内に限定して無効化し、正規化した白い文字が黒へ戻るのを防ぎます。
-
-余白は公開 `scrollToContent({ fitToContent: true, canvasOffsets, maxZoom: 1 })` で指定します。上下左右の設定値に加えて下部の操作UI用に48pxを確保し、極端に小さいペインでは少なくとも80pxの表示領域を残すよう余白を減らします。elementの座標は書き換えません。Excalidraw 0.18.1の最小ズームは10%なので、それでも収まらない極端に巨大な図は全体フィットできず、パンによる閲覧が必要です。
-
-構文エラーはノート内に `Mermaid diagram could not be rendered.` と詳細を表示します。エラー文字列はReactのテキストとして表示し、HTMLとして挿入しません。
-
-## Example
-
-### Sequence Diagram
+### Sequence diagram
 
 ````markdown
 ```mermaid-excalidraw
 sequenceDiagram
-    User->>Obsidian: Open note
-    Obsidian->>Plugin: Render block
-    Plugin->>Mermaid: Parse diagram
-    Mermaid->>Excalidraw: Convert
-    Excalidraw-->>User: Display diagram
+    Alice->>Bob: Hello
+    Bob-->>Alice: Hi Alice
 ```
 ````
 
-### Class / ER / State
+### Class, ER and State diagrams
+
+These examples currently display as SVG images inside the canvas:
 
 ````markdown
 ```mermaid-excalidraw
 classDiagram
 class User {
-  +String name
-  +login()
+    +String name
+    +login()
 }
 ```
 
 ```mermaid-excalidraw
 erDiagram
-USER ||--o{ POST : writes
+    USER ||--o{ POST : writes
 ```
 
 ```mermaid-excalidraw
 stateDiagram-v2
-[*] --> Idle
-Idle --> Active
-Active --> [*]
+    [*] --> Idle
+    Idle --> Active
+    Active --> [*]
 ```
 ````
 
-### SVG fallback
+## Settings
 
-Gantt・Pie・Timelineなど、上流がネイティブ変換しないタイプはSVG画像としてExcalidraw上に表示されます。上流生成SVGの文字・線・fillだけを白黒テーマへ正規化し、図の構造・座標・フォントは保持します。画像ファイルには配色ごとのIDを付け、公開 `addFiles()` の画像キャッシュに古い色が残るのを防ぎます。SVG以外の画像はそのまま渡します。SVG画像内のroughnessは変更できず、レイアウトや図形はMermaidのものが残ります。
+Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams and persist in your vault's plugin settings.
 
-````markdown
-```mermaid-excalidraw
-pie title Usage
-    "Work" : 70
-    "Rest" : 30
-```
-````
+| Control | Default | Range / behavior |
+| --- | --- | --- |
+| Font size | 20 px | 12–48 px; native diagram text |
+| Roughness | Architect (1) | Clean (0), Architect (1), Artist (2) |
+| Canvas height | 600 px | 240–1200 px |
+| Canvas padding | 32 px | 16–128 px; extra space for canvas controls |
+| Theme | Follow Obsidian | Uses the note background and contrasting black/white foreground |
 
-## Architecture
+Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In very narrow panes, padding is reduced to leave room for content. Legacy `maxHeight` settings migrate to canvas height.
 
-```text
-Markdown code block
-  → registerMarkdownCodeBlockProcessor("mermaid-excalidraw")
-  → MarkdownRenderChild + createRoot()
-  → conversion queue + parseMermaidToExcalidraw()
-  → ExcalidrawElementSkeleton[] (+ files)
-  → convertToExcalidrawElements()
-  → appearance normalization (roughness / colors / SVG files)
-  → API.updateScene() + API.addFiles()
-  → bounding box / API.refresh() / API.scrollToContent()
-  → <Excalidraw viewModeEnabled zenModeEnabled />
-```
+## Privacy and security
 
-| ファイル | 責務 |
-| --- | --- |
-| `src/main.ts` | Obsidianの登録、テーマイベント、設定保存 |
-| `src/renderer/MermaidExcalidrawRenderer.ts` | コードブロックとrender childの管理 |
-| `src/renderer/ExcalidrawRenderChild.ts` | React Root、変換キャンセル、unmount |
-| `src/renderer/conversion.ts` | 上流変換の呼び出し、順序制御、エラー処理 |
-| `src/renderer/ExcalidrawView.tsx` | 公開React/APIでの閲覧表示、サイズ追従 |
-| `src/renderer/layout.ts` | 公開APIによる余白とフィットの設定 |
-| `src/appearance/applyAppearance.ts` | 型安全な要素のroughness・配色正規化 |
-| `src/appearance/resolveTheme.ts` | Obsidian背景色と白黒コントラストの判定 |
-| `src/appearance/normalizeSvgFiles.ts` | SVG画像の配色正規化、画像ID更新 |
-| `src/settings/` | 設定検証と設定タブ |
-| `scripts/build-assets.mjs` | CSSのscope化とフォントのdata URL化 |
+No payment, account, ads or telemetry are required or included. The plugin does not scan your vault, modify notes, access files outside the vault, or install/update itself or its dependencies. Only plugin settings are saved through Obsidian's public API.
 
-ノートの切り替えではObsidianがrender childをunloadし、必ず `root.unmount()` を実行します。プラグイン無効化でも残るchildをすべてunloadします。進行中の変換は中断できない上流処理の完了を待ち、キャンセル済みの結果を破棄します。待機中の変換は開始しません。ResizeObserverとanimation frameはcleanupします。テーマ変更のグローバルイベントはプラグイン単位で1つです。
+Normal rendering uses bundled JavaScript and fonts and works offline. Mermaid features referencing external images can cause upstream rendering to request external resources; use trusted diagram source and avoid remote resource references. Such requests may disclose your IP address to the referenced host. Diagram links are prevented from opening through this plugin's canvas. See [SECURITY.md](SECURITY.md) for the threat model and private reporting instructions.
 
-## Dependencies and upstream compatibility
+Mermaid runs in strict mode with protected security configuration. Inputs are limited to 50,000 characters and 500 edges. Errors are displayed as text. Strict mode and size limits reduce risk; they do not make arbitrary imported diagrams a security sandbox.
 
-主要パッケージは `@excalidraw/excalidraw 0.18.1`、`@excalidraw/mermaid-to-excalidraw 2.2.2`、React / react-dom 18.3.1、Mermaid 11.17.2です。esbuildでCommonJSの `main.js` を生成します。Obsidianはhostが提供します。
+## Known limitations and troubleshooting
 
-**互換性上の制約:** 上流にはFlowchart・Sequence・Class・ER・Stateのネイティブ変換実装があります。11.12.1との組み合わせでは5種類とも手書き風に変換できることを実測しましたが、同バージョンにはHTML/CSS injection等の既知のadvisoryがあります。安全性を優先して11.17.2を採用しています。この構成ではClass・ER・StateのDOM構造/識別子が上流converterと合わず、確認用サンプルはSVG画像にフォールバックします。3種類も表示できますが、手書き風へのネイティブ変換は未達です。ER等では上流がフォールバック理由をconsoleに記録します。独自のSVG parserや依存ライブラリのprivate APIへのパッチは追加していません。今後、上流側が新しいMermaidの識別子に対応したら、依存更新と描画テストの再実行で改善できます。
+- Reading view is the supported view. Live Preview is not part of the release acceptance criteria.
+- Mobile has not been tested. The browser-compatible code does not establish mobile compatibility.
+- Class/ER/State fall back to SVG with Mermaid 11.17.2 and converter 2.2.2. This secure dependency combination is preferred over downgrading Mermaid for conversion fidelity.
+- SVG fallback preserves upstream layout; Gantt date-axis labels can overlap in narrow views.
+- Appearance is normalized to monochrome; Mermaid's original colors are not preserved.
+- Very large diagrams may need panning because Excalidraw's minimum zoom is 10%. Expensive input can still block rendering; there is no hard timeout or worker isolation.
+- The bundle includes diagram renderers and fonts and is relatively large.
 
-インストール済み型に従い、0.18.1では `excalidrawAPI` コールバックを使用します。上流Playgroundの新しい `onInitialize` などはこの公開バージョンにはありません。上流を調査したファイルは `README.md`、`src/index.ts`、`src/parseMermaid.ts`、`src/graphToExcalidraw.ts`、`src/interfaces.ts`、`playground/ExcalidrawWrapper.tsx` です。
+If nothing appears, check the block language, plugin enablement and Reading view. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).
 
-- [mermaid-to-excalidraw repository](https://github.com/excalidraw/mermaid-to-excalidraw)
-- [Excalidraw public API](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/props/)
-- [Obsidian sample plugin](https://github.com/obsidianmd/obsidian-sample-plugin)
+Disable the plugin to stop rendering; your Mermaid source remains in the note. To roll back manually, replace all three runtime files with files from the same earlier release and restart Obsidian.
 
-フォントをdata URLとして同梱するため、通常の描画にCDN接続は不要です。CSSセレクター・アニメーション名はプラグイン用scopeに変換します。上流フォント・バンドルしたJavaScriptのライセンスは `main.js` 内のコメントと、配布成果物の `THIRD_PARTY_NOTICES.txt` に収録します。
+## Development
 
-## Security and limits
-
-Mermaidの公開設定 `securityLevel: "strict"` を使用し、`secure` で入力内のinit/frontmatterからsecurityLevel・サイズ制限などが上書きされないようにします。公開ラッパーの型は設定の一部のみを公開していますが、インストール済みソースが設定オブジェクトをMermaidへ渡すことを確認し、構造的型付けで追加設定を渡します。`any` やprivate APIへの依存はありません。
-
-入力は50,000文字・500 edgeに制限します。変換ライブラリ内部では一時SVGを生成します。プラグインはMermaid parserやdiagram rendererを独自実装しません。Appearance層では上流SVGを標準のDOMParserで読み、色のstyle宣言だけを正規化して再シリアライズします。SVGをホストDOMに挿入することはありません。上流のSVGは上流のstrict設定でサニタイズされます。
-
-図の変換精度・SVG fallbackのテーマ/文字サイズ・巨大図のレイアウトは上流仕様に依存します。同梱するフォントと全diagram rendererにより、配布バンドルは比較的大きくなります。MVPではキャッシュ・遅延mount・SVG/PNG/.excalidrawのエクスポートは実装していません。
-
-## Development and verification
+Use Node.js 22.13+ within the 22 series, or 24+, and npm 10+. Node.js is only required for development.
 
 ```sh
-npm run dev          # TypeScript / CSSの変更をwatch
-npm run typecheck
+npm ci
 npm run lint
-npm run test         # 設定・余白・コントラスト・変換ラッパーのunit test
+npm test
+npm run test:release
 npm run build
-npm run test:browser # Chromeで実際の配布main.jsを検証
-npm run test:vault   # 手動確認用のtest-vault/を生成
+npm run test:browser
 ```
 
-ブラウザーテストはObsidianのhost APIだけをmockし、配布用の実際の `main.js` とMermaid・React・Excalidrawを使用します。Flowchart・Sequenceのネイティブ変換、Class・ER・State・Gantt・Pie・TimelineのSVG fallback、構文エラー、20個同時描画、IDの重複、Light/Dark往復、設定変更、狭い画面、非同期処理中のunload、プラグイン無効化を検証します。Appearance設定UIの操作・保存、roughness 0/1/2の描画差、余白によるフィットの変化、小図の拡大抑止、カスタム背景色、カラフルな入力も検証します。実際のcanvas画素を読み、SVGを含めた背景色・白黒の線・文字と色反転の無効化を確認します。上流のフォールバック診断だけを許容し、その他のconsole error・warning・未処理例外は失敗として扱います。描画例を `test-results/diagrams-light.png` / `diagrams-dark.png` に保存します。
+The output is `dist/mermaid-excalidraw-renderer/`. Local browser tests use Google Chrome; for Chromium run `npx playwright install chromium` followed by `PLAYWRIGHT_CHANNEL=chromium npm run test:browser`. Browser tests exercise the actual production bundle with a mocked Obsidian host. Native-host and mobile testing are separate checks.
 
-ローカルはGoogle Chromeを使用します。Chromiumだけを使用する場合は次のように実行してください。
+See [CONTRIBUTING.md](CONTRIBUTING.md), [release readiness](RELEASE_READINESS.md), [release operations](docs/MermaidExcalidraw_リリース運用手順.md) and [submission checklist](docs/COMMUNITY_SUBMISSION.md).
 
-```sh
-npx playwright install chromium
-PLAYWRIGHT_CHANNEL=chromium npm run test:browser
-```
+## License and acknowledgments
 
-`npm run test:vault` の後、Obsidianで `test-vault/` をVaultとして開き、`Diagrams`、`Multiple diagrams`、`Empty note` を切り替えてReading Viewを確認してください。このフォルダーはGitの対象外です。最小対応バージョンやモバイルについては別途実機確認が必要です。
+[MIT](LICENSE), copyright 2026 taichi. This is an independent community project.
 
-CIはNode.js 22でinstall・lint・unit test・build・Chromiumの描画テストを実行し、3ファイルの配布フォルダーと検証結果をartifactとして保存します。
-
-2026-10-07のローカル検証では、install・build・typecheck・lint、15件のunit test、4件のブラウザーテストが成功しました。ブラウザーテストはproductionとdevelopmentのReactで実行し、20図でReact warningが出ないことを確認しました。macOS / Obsidian 1.13.7でもプラグインのロード、設定画面、Reading ViewのFlowchart・Sequence・SVG fallback・inline error、ノート切り替えを確認しています。ランタイム依存の `npm audit --omit=dev` は0件でした。
-
-今回のAppearance追加後（2026-10-07）は、TypeScriptエラー0、lint、unit test 22件、ブラウザーテスト8件、`npm run build` がすべて成功しました。配布用のproductionバンドルで検証しています。macOS / Obsidian 1.13.7のテストVaultでも、Roughness 0/1/2、Canvas height 240/400/600 px、Canvas padding 32/128 px、Light/Darkの自動配色と既存図の更新を確認しました。Flowchart・Sequence、Class・ER・StateのSVG fallback、およびLightでのGantt・Pie・Timelineを実機で確認しています。テスト後はSystemテーマとAppearanceの初期設定に戻しています。
-
-実機確認では、Obsidianがキャッシュした非表示のReading Viewセクションを再表示すると、Excalidrawの内部表示サイズが0×0のままで図が空白になる問題を発見して修正しました。0.18.1の `refresh()` はオフセットのみを更新するため、公開APIの `updateScene()` で表示サイズを同期してから `scrollToContent()` を呼びます。修正版をテストVaultへ再インストールしてObsidianを再ロードし、Class・ER・Stateの表示を確認しました。非表示状態でのmountと再表示・幅変更・Dark切り替えもブラウザーの回帰テストで検証しています。
-
-## Appearance追加の変更ファイル
-
-| 分類 | ファイル |
-| --- | --- |
-| 新規Appearance層 | `src/appearance/applyAppearance.ts`、`src/appearance/resolveTheme.ts`、`src/appearance/normalizeSvgFiles.ts` |
-| 設定・型 | `src/settings/settings.ts`、`src/settings/SettingsTab.ts`、`src/types.ts` |
-| 既存レンダリングの拡張 | `src/renderer/ExcalidrawView.tsx`、`src/renderer/ExcalidrawRenderChild.ts`、`src/renderer/MermaidExcalidrawRenderer.ts`、`src/renderer/layout.ts` |
-| CSS | `src/styles.css` |
-| ブラウザーテスト | `tests/browser/renderer.spec.ts`、`tests/browser/harness.ts`、`tests/browser/obsidian-mock.ts` |
-| 単体テスト | `tests/unit/settings.test.ts`、`tests/unit/layout.test.ts` |
-| ドキュメント | `README.md` |
+Rendering uses [Excalidraw](https://github.com/excalidraw/excalidraw), [mermaid-to-excalidraw](https://github.com/excalidraw/mermaid-to-excalidraw), [Mermaid](https://github.com/mermaid-js/mermaid) and [React](https://github.com/facebook/react). Bundled dependency and font licenses are generated in `THIRD_PARTY_NOTICES.txt` and embedded in `main.js`; additional font license sources are in [licenses/](licenses/).

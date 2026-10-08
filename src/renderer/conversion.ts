@@ -23,6 +23,7 @@ interface SecureMermaidConfig extends MermaidConfig {
   securityLevel: "strict";
   secure: string[];
   suppressErrorRendering: boolean;
+  themeCSS: string;
 }
 
 export function createMermaidConfig(fontSize: number): SecureMermaidConfig {
@@ -31,8 +32,9 @@ export function createMermaidConfig(fontSize: number): SecureMermaidConfig {
     themeVariables: { fontSize: `${fontSize}px` },
     securityLevel: "strict",
     secure: ["secure", "securityLevel", "startOnLoad", "maxTextSize", "maxEdges",
-      "suppressErrorRendering"],
+      "suppressErrorRendering", "themeCSS", "dompurifyConfig"],
     suppressErrorRendering: true,
+    themeCSS: "",
     maxEdges: 500,
     maxTextSize: 50_000,
   };

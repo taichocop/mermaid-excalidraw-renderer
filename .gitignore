@@ -10,3 +10,8 @@ playwright-report/
 tests/browser/build/
 .DS_Store
 test-vault/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
