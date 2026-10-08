@@ -1,6 +1,7 @@
 import type { PluginSettings } from "../types";
 
 export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
+  renderStandardMermaid: true,
   fontSize: 20,
   maxHeight: 600,
   roughness: 1,
@@ -26,7 +27,10 @@ export function validateSettings(data: unknown): PluginSettings {
   const values = typeof data === "object" && data !== null ? data : {};
   const legacyHeight = "maxHeight" in values ? values.maxHeight : undefined;
   const roughness = "roughness" in values ? values.roughness : undefined;
+  const renderStandardMermaid = "renderStandardMermaid" in values ? values.renderStandardMermaid : undefined;
   return {
+    renderStandardMermaid: typeof renderStandardMermaid === "boolean"
+      ? renderStandardMermaid : DEFAULT_SETTINGS.renderStandardMermaid,
     fontSize: boundedInteger("fontSize" in values ? values.fontSize : undefined,
       DEFAULT_SETTINGS.fontSize, FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max),
     maxHeight: boundedInteger("maxHeight" in values ? values.maxHeight : undefined,

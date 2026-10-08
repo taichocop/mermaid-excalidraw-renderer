@@ -15,6 +15,13 @@ export class SettingsTab extends PluginSettingTab {
   display(): void {
     this.containerEl.empty();
     new Setting(this.containerEl)
+      .setName("Render standard mermaid blocks as Excalidraw")
+      .setDesc("On by default, including after upgrading. Changes immediately refresh open Reading views. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render; standard Mermaid in Live Preview is not supported.")
+      .addToggle((toggle) => toggle.setValue(this.host.settings.renderStandardMermaid)
+        .onChange(async (renderStandardMermaid) => {
+          await this.host.updateSettings({ ...this.host.settings, renderStandardMermaid });
+        }));
+    new Setting(this.containerEl)
       .setName("Font size")
       .setDesc("Diagram text size in pixels (12–48). Changes apply to open diagrams.")
       .addSlider((slider) => slider.setLimits(FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, 1)

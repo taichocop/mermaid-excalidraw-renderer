@@ -468,7 +468,7 @@ test("invalid syntax stays inline and displays untrusted error strings as text",
   await expect(page.locator(".mermaid-excalidraw-error img")).toHaveCount(0);
   await page.evaluate(() => window.harness.mount(`%%{init: {"securityLevel":"loose"}}%%
 flowchart TD
-A["<img src=x onerror='window.pwned=1'>"] --> B[safe]`));
+A["<b onmouseover='window.pwned=1'>Safe</b>"] --> B[safe]`));
   await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
   expect(await page.evaluate(() => "pwned" in window)).toBe(false);
 });
@@ -514,5 +514,179 @@ test("unload cancels pending work, settings update existing canvases, and narrow
   await page.setViewportSize({ width: 380, height: 700 });
   await expect.poll(() => page.locator(".mermaid-excalidraw-container").evaluate((el) => el.clientHeight)).toBe(240);
   await page.evaluate(() => window.harness.clear());
+  expect(errors).toEqual([]);
+});
+
+
+test("standard Mermaid defaults on and shares native, SVG, inline-error and theme lifecycle", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const names = ["flowchart", "sequence", "class", "er", "state", "blockSimple"] as const;
+  await page.evaluate((names) => {
+    window.harness.mountSamples([...names], "mermaid");
+    window.harness.mount("flowchart LR\nA -->", "mermaid");
+    window.harness.mountSamples(["flowchart"]);
+  }, names);
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(7);
+  await expect(page.locator('[data-state="error"]')).toHaveCount(1);
+  await expect(page.locator("canvas.static")).toHaveCount(7);
+  const scenes = await page.evaluate(() => window.harness.sceneSummaries());
+  expect(scenes.slice(0, 2).every((scene) => scene && !scene.imageFallback && scene.count > 1)).toBe(true);
+  expect(scenes.slice(2, 6)).toEqual(Array.from({ length: 4 }, () => ({ count: 1, imageFallback: true })));
+  expect(scenes[6]).toBeNull();
+  const sourceBlocks = await page.evaluate(() => window.harness.hostState().blocks);
+  for (const dark of [false, true, false]) {
+    await page.evaluate((dark) => window.harness.theme(dark), dark);
+    await expect.poll(async () => (await scenePixels(page)).every((scene) =>
+      scene.ink > 100 && scene.background.every((value) => value === (dark ? 30 : 255)))).toBe(true);
+  }
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: false }));
+  await expect(page.locator(".standard-mermaid")).toHaveCount(7);
+  await expect(page.locator("canvas.static")).toHaveCount(1);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(1);
+  expect(await page.evaluate(() => window.harness.savedSettings()?.renderStandardMermaid)).toBe(false);
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: true }));
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(7);
+  await expect(page.locator('[data-state="error"]')).toHaveCount(1);
+  await expect(page.locator("canvas.static")).toHaveCount(7);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(8);
+  expect(await page.evaluate(() => window.harness.hostState().blocks)).toEqual(sourceBlocks);
+  await page.evaluate(() => window.harness.disable());
+  await expect(page.locator("canvas")).toHaveCount(0);
+  await expect(page.locator(".standard-mermaid")).toHaveCount(7);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(0);
+  expect(await page.evaluate(() => window.harness.hostState().postProcessors)).toEqual([0]);
+  expect(errors).toEqual([]);
+});
+
+test("standard Mermaid toggle persists across reloads and dedicated blocks remain enabled", async ({ page }) => {
+  await page.evaluate(() => {
+    window.harness.mountSamples(["sequence"], "mermaid");
+    window.harness.mountSamples(["class"]);
+    window.harness.openSettings();
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  const toggle = page.getByRole("checkbox", { name: "Render standard mermaid blocks as Excalidraw" });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.harness.savedSettings()?.renderStandardMermaid)).toBe(false);
+  await page.evaluate(async () => { window.harness.disable(); await window.harness.enable(); });
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: true }));
+  await page.evaluate(async () => { window.harness.disable(); await window.harness.enable(); });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  await page.evaluate(async () => { window.harness.disable(); await window.harness.enable({ fontSize: 24 }); });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  await page.evaluate(() => {
+    window.harness.clear();
+    window.harness.mountSamples(["er"], "mermaid");
+    window.harness.mountSamples(["flowchart"]);
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(2);
+  await page.evaluate(() => window.harness.disable());
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(0);
+  expect(await page.evaluate(() => window.harness.hostState().editorLanguages)).toEqual([]);
+});
+
+test("standard Mermaid DOM priority leaves other plugin registrations intact", async ({ page }) => {
+  await page.evaluate(() => {
+    window.harness.mountSamples(["flowchart"], "mermaid");
+    window.harness.addCompetitor(-200);
+  });
+  await expect(page.locator(".competitor-mermaid")).toHaveCount(1);
+  await expect(page.locator("canvas")).toHaveCount(0);
+  expect(await page.evaluate(() => window.harness.hostState().editorLanguages)).toEqual(["mermaid-excalidraw", "mermaid"]);
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: false }));
+  await expect(page.locator(".competitor-mermaid")).toHaveCount(1);
+  await page.evaluate(() => window.harness.disable());
+  expect(await page.evaluate(() => window.harness.hostState().editorLanguages)).toEqual(["mermaid"]);
+  await expect(page.locator(".competitor-mermaid")).toHaveCount(1);
+  await page.evaluate(async () => {
+    await window.harness.enable({ renderStandardMermaid: true });
+    window.harness.removeCompetitor();
+    window.harness.addCompetitor(0);
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
+  await expect(page.locator(".competitor-mermaid")).toHaveCount(0);
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: false }));
+  // At equal order 0, the earlier built-in consumes the code first. The
+  // competitor's registration still exists; OFF does not reorder it.
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  await expect(page.locator(".competitor-mermaid")).toHaveCount(0);
+  expect(await page.evaluate(() => window.harness.hostState().editorLanguages)).toEqual(["mermaid-excalidraw", "mermaid"]);
+  await page.evaluate(() => { window.harness.disable(); window.harness.removeCompetitor(); });
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  expect(await page.evaluate(() => window.harness.hostState().postProcessors)).toEqual([0]);
+});
+
+test("source-mode preview caches refresh after toggles, disable and re-enable", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.evaluate(() => {
+    window.harness.mountSamples(["flowchart"], "mermaid");
+    window.harness.mountSamples(["sequence"]);
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  const sourceBlocks = await page.evaluate(() => window.harness.hostState().blocks);
+  await page.evaluate(async () => {
+    window.harness.setViewMode("source");
+    await window.harness.updateSettings({ renderStandardMermaid: false });
+  });
+  expect(await page.evaluate(() => window.harness.hostState().previewInvalidated)).toBe(true);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(0);
+  await page.evaluate(() => window.harness.setViewMode("preview"));
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
+  await expect(page.locator("canvas.static")).toHaveCount(1);
+  await page.evaluate(async () => {
+    window.harness.setViewMode("source");
+    await window.harness.updateSettings({ renderStandardMermaid: true });
+    window.harness.setViewMode("preview");
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  await expect(page.locator("canvas.static")).toHaveCount(2);
+  await page.evaluate(() => {
+    window.harness.setViewMode("source");
+    window.harness.disable();
+  });
+  expect(await page.evaluate(() => window.harness.hostState().previewInvalidated)).toBe(true);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(0);
+  await page.evaluate(() => window.harness.setViewMode("preview"));
+  await expect(page.locator(".standard-mermaid")).toHaveCount(1);
+  await expect(page.locator("canvas")).toHaveCount(0);
+  await page.evaluate(async () => {
+    window.harness.setViewMode("source");
+    await window.harness.enable();
+  });
+  expect(await page.evaluate(() => window.harness.hostState().previewInvalidated)).toBe(true);
+  await page.evaluate(() => window.harness.setViewMode("preview"));
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(2);
+  await expect(page.locator("canvas.static")).toHaveCount(2);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(2);
+  expect(await page.evaluate(() => window.harness.hostState().blocks)).toEqual(sourceBlocks);
+  expect(errors).toEqual([]);
+});
+
+test("rapid standard Mermaid toggles cancel pending conversions without duplicate roots", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.evaluate(async () => {
+    window.harness.mountSamples(["flowchart", "sequence", "blockSimple"], "mermaid");
+    await window.harness.updateSettings({ renderStandardMermaid: false });
+    await window.harness.updateSettings({ renderStandardMermaid: true });
+    await window.harness.updateSettings({ renderStandardMermaid: false });
+  });
+  await expect(page.locator(".standard-mermaid")).toHaveCount(3);
+  await expect(page.locator("canvas")).toHaveCount(0);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(0);
+  await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: true }));
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(3);
+  await expect(page.locator("canvas.static")).toHaveCount(3);
+  expect(await page.evaluate(() => window.harness.hostState().children)).toBe(3);
+  await page.evaluate(() => window.harness.disable());
+  await expect(page.locator("canvas")).toHaveCount(0);
   expect(errors).toEqual([]);
 });

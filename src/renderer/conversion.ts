@@ -3,6 +3,7 @@ import {
   type MermaidConfig,
 } from "@excalidraw/mermaid-to-excalidraw";
 import type { PluginSettings } from "../types";
+import { rejectResourceSyntax } from "./sourcePolicy";
 
 export type DiagramData = Awaited<ReturnType<typeof parseMermaidToExcalidraw>>;
 export type ConversionResult =
@@ -52,6 +53,7 @@ export class MermaidConverter {
       try {
         if (source.length > 50_000) throw new Error("Diagram exceeds the 50,000 character limit.");
         if (!source.trim()) throw new Error("The Mermaid code block is empty.");
+        rejectResourceSyntax(source);
         const data = await this.parse(source, createMermaidConfig(settings.fontSize));
         return signal.aborted ? { status: "cancelled" } : { status: "success", data };
       } catch (cause: unknown) {

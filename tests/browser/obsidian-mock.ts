@@ -2,30 +2,104 @@ import type { PluginSettings } from "../../src/types";
 
 export class MarkdownRenderChild {
   private loaded = false;
+  private cleanups: (() => void)[] = [];
   constructor(public containerEl: HTMLElement) {}
   load() { if (!this.loaded) { this.loaded = true; this.onload(); } }
-  unload() { if (this.loaded) { this.loaded = false; this.onunload(); } }
+  unload() { if (this.loaded) { this.loaded = false; for (const cleanup of this.cleanups.splice(0).reverse()) cleanup(); this.onunload(); } }
+  register(cleanup: () => void) { this.cleanups.push(cleanup); }
   onload() {}
   onunload() {}
 }
 
-type Processor = (source: string, element: HTMLElement, context: { addChild(child: MarkdownRenderChild): void }) => void;
+type Context = { addChild(child: MarkdownRenderChild): void };
+type Processor = (source: string, element: HTMLElement, context: Context) => void;
+type PostProcessor = (element: HTMLElement, context: Context) => void;
+
+// Model the observed 1.14.4 host: ordered DOM postprocessors are separate from
+// the editor's language registry. Built-in Mermaid consumes remaining code at 0.
+export class MarkdownPreviewRenderer {
+  static postProcessors: { processor: PostProcessor; order: number }[] = [];
+  static codeBlockProcessors = new Map<string, Processor>();
+  static registerPostProcessor(processor: PostProcessor, order = 0) {
+    this.postProcessors.push({ processor, order });
+    this.postProcessors.sort((a, b) => a.order - b.order);
+  }
+  static unregisterPostProcessor(processor: PostProcessor) {
+    this.postProcessors = this.postProcessors.filter((entry) => entry.processor !== processor);
+  }
+  static createCodeBlockPostProcessor(language: string, handler: Processor): PostProcessor {
+    return (element, context) => {
+      for (const code of element.querySelectorAll(`code.language-${language}`)) {
+        const source = (code.textContent ?? "").replace(/\n$/, "");
+        const block = document.createElement("div");
+        block.className = `block-language-${language}`;
+        code.parentElement?.replaceWith(block);
+        handler(source, block, context);
+      }
+    };
+  }
+  static process(element: HTMLElement, context: Context) {
+    for (const { processor } of this.postProcessors) processor(element, context);
+  }
+}
+const builtInMermaid = MarkdownPreviewRenderer.createCodeBlockPostProcessor("mermaid", (source, element) => {
+  element.className = "standard-mermaid";
+  // Placeholder, not an alternate Mermaid renderer or native-host proof.
+  element.textContent = `Obsidian standard Mermaid: ${source}`;
+});
+MarkdownPreviewRenderer.registerPostProcessor(builtInMermaid);
+
+export class MarkdownView {
+  mode: "preview" | "source" = "preview";
+  rerenders = 0;
+  previewMode: { rerender(full?: boolean): void };
+  constructor(refresh: () => void) {
+    this.previewMode = { rerender: (full) => {
+      if (full !== true) throw new Error("Expected full preview rerender");
+      this.rerenders++;
+      refresh();
+    } };
+  }
+  getMode() { return this.mode; }
+}
 
 export class Plugin {
   processors = new Map<string, Processor>();
   events: (() => void)[] = [];
-  saved: PluginSettings | null = null;
+  private cleanups: (() => void)[] = [];
+  saved: unknown = null;
   settingTab: PluginSettingTab | null = null;
-  app = { workspace: { on: (_name: string, callback: () => void) => {
-    this.events.push(callback); return callback;
-  } } };
+  app = { workspace: {
+    views: [] as MarkdownView[],
+    on: (_name: string, callback: () => void) => { this.events.push(callback); return callback; },
+    onLayoutReady: (callback: () => void) => callback(),
+    getLeavesOfType: (_type: string) => this.app.workspace.views.map((view) => ({ view })),
+  } };
   async loadData(): Promise<unknown> { return this.saved; }
-  async saveData(data: PluginSettings) { this.saved = data; }
-  registerMarkdownCodeBlockProcessor(language: string, processor: Processor) {
-    this.processors.set(language, processor);
+  async saveData(data: PluginSettings) { this.saved = JSON.parse(JSON.stringify(data)); }
+  register(cleanup: () => void) { this.cleanups.push(cleanup); }
+  registerMarkdownPostProcessor(processor: PostProcessor, sortOrder = 0) {
+    MarkdownPreviewRenderer.registerPostProcessor(processor, sortOrder);
+    this.register(() => MarkdownPreviewRenderer.unregisterPostProcessor(processor));
+    return processor;
   }
-  registerEvent(_event: unknown) {}
+  registerMarkdownCodeBlockProcessor(language: string, handler: Processor, sortOrder = 0) {
+    const processor = MarkdownPreviewRenderer.createCodeBlockPostProcessor(language, handler);
+    MarkdownPreviewRenderer.registerPostProcessor(processor, sortOrder);
+    if (MarkdownPreviewRenderer.codeBlockProcessors.has(language)) throw new Error(`Code block postprocessor for language ${language} is already registered`);
+    MarkdownPreviewRenderer.codeBlockProcessors.set(language, handler);
+    this.processors.set(language, handler);
+    this.register(() => {
+      MarkdownPreviewRenderer.codeBlockProcessors.delete(language);
+      this.processors.delete(language);
+      MarkdownPreviewRenderer.unregisterPostProcessor(processor);
+    });
+    return processor;
+  }
+  registerEvent(event: unknown) { this.register(() => { this.events = this.events.filter((callback) => callback !== event); }); }
   addSettingTab(tab: PluginSettingTab) { this.settingTab = tab; }
+  onunload() {}
+  unload() { for (const cleanup of this.cleanups.splice(0).reverse()) cleanup(); this.onunload(); }
 }
 
 export class PluginSettingTab {
@@ -46,6 +120,14 @@ export class Setting {
   setName(name: string) { this.label.textContent = name; return this; }
   setDesc(description: string) { this.row.title = description; return this; }
   setHeading() { this.row.setAttribute("role", "heading"); return this; }
+  addToggle(build: (control: Toggle) => void) {
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("aria-label", this.label.textContent ?? "");
+    this.row.append(input);
+    build(new Toggle(input));
+    return this;
+  }
   addDropdown(build: (control: Dropdown) => void) {
     const input = document.createElement("select");
     input.setAttribute("aria-label", this.label.textContent ?? "");
@@ -75,4 +157,10 @@ class Slider {
   setValue(value: number) { this.input.value = String(value); return this; }
   setDynamicTooltip() { return this; }
   onChange(callback: (value: number) => Promise<void>) { this.input.oninput = () => { void callback(Number(this.input.value)); }; return this; }
+}
+
+class Toggle {
+  constructor(private input: HTMLInputElement) {}
+  setValue(value: boolean) { this.input.checked = value; return this; }
+  onChange(callback: (value: boolean) => Promise<void>) { this.input.onchange = () => { void callback(this.input.checked); }; return this; }
 }

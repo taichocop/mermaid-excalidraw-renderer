@@ -2,7 +2,9 @@
 
 Render Mermaid diagrams in an Excalidraw-style view directly inside your Obsidian notes.
 
-Write Mermaid text in a `mermaid-excalidraw` code block and open **Reading view**. The plugin works independently of the Excalidraw community plugin and leaves standard `mermaid` blocks unchanged.
+Write Mermaid text in a normal `mermaid` code block and open **Reading view**. Enabling the plugin renders these blocks in Excalidraw by default, without changing your notes. The plugin works independently of the Excalidraw community plugin. Dedicated `mermaid-excalidraw` blocks also continue to work.
+
+**Upgrading to 0.1.1 changes the initial appearance of existing standard Mermaid blocks.** New installations and older settings without the new option default to ON. To keep Obsidian’s standard display, turn off **Render standard mermaid blocks as Excalidraw** in the plugin settings. A saved OFF value remains OFF after restarting or disabling/re-enabling the plugin.
 
 ## Features
 
@@ -41,15 +43,17 @@ Optional `SHA256SUMS.txt`, `LICENSE` and `THIRD_PARTY_NOTICES.txt` attachments a
 
 ## Usage
 
-Copy this complete block into a note, then switch to Reading view:
+Copy this complete block into a note, then switch to Reading view (the standard-block setting defaults to ON):
 
 ````markdown
-```mermaid-excalidraw
+```mermaid
 flowchart LR
     A[Idea] --> B[Mermaid]
     B --> C[Excalidraw]
 ```
 ````
+
+Use `mermaid-excalidraw` instead of `mermaid` for a block that should always use this plugin, even when the standard-block setting is OFF.
 
 Edit the source text to change the diagram. The view supports panning and zooming; editing drawings, saving Excalidraw files and exporting images are not included.
 
@@ -111,11 +115,14 @@ Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams 
 
 | Control | Default | Range / behavior |
 | --- | --- | --- |
+| Render standard mermaid blocks as Excalidraw | ON | Reading view; OFF restores Obsidian’s standard rendering. Dedicated blocks always use Excalidraw. |
 | Font size | 20 px | 12–48 px; native diagram text |
 | Roughness | Architect (1) | Clean (0), Architect (1), Artist (2) |
 | Canvas height | 600 px | 240–1200 px |
 | Canvas padding | 32 px | 16–128 px; extra space for canvas controls |
 | Theme | Follow Obsidian | Uses the note background and contrasting black/white foreground |
+
+The standard-block toggle immediately requests a full redraw of open Reading views, including split panes; rendering may briefly show a loading indicator. Cached previews in editing panes are also invalidated, so returning to Reading view uses the current setting. Disabling the plugin also clears its canvases and refreshes Markdown preview caches so standard Mermaid can render again, including when returning from editing mode. The note text and other plugins’ registrations are preserved. Explicit OFF values are saved; missing or invalid values default to ON.
 
 Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In very narrow panes, padding is reduced to leave room for content. Legacy `maxHeight` settings migrate to canvas height.
 
@@ -123,18 +130,22 @@ Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In v
 
 No payment, account, ads or telemetry are required or included. The plugin does not scan your vault, modify notes, access files outside the vault, or install/update itself or its dependencies. Only plugin settings are saved through Obsidian's public API.
 
-Normal rendering uses bundled JavaScript and fonts and works offline. Mermaid features referencing external images can cause upstream rendering to request external resources; use trusted diagram source and avoid remote resource references. Such requests may disclose your IP address to the referenced host. Diagram links are prevented from opening through this plugin's canvas. See [SECURITY.md](SECURITY.md) for the threat model and private reporting instructions.
+Rendering uses bundled JavaScript and fonts and works offline. Before calling the converter, both standard and dedicated blocks reject resource-capable source with an inline error: image/node metadata (`@{…}`), resource HTML attributes/tags, Markdown images, CSS image/import syntax and URLs. Backslash escapes, HTML/Mermaid entities and CSS comments are also refused because they can conceal those constructs. This conservative policy can reject harmless labels, comments, escaped text and non-image node metadata; simplify the source to use this renderer.
+
+The plugin does not use Obsidian’s built-in Mermaid trust prompt. The source guard applies even when a vault is trusted and cannot be disabled for dedicated blocks. Turning the standard-block setting OFF returns standard blocks to Obsidian’s renderer and its own trust behavior; this plugin’s guard no longer processes those blocks. Diagram links are prevented from opening through this plugin’s canvas. See [SECURITY.md](SECURITY.md) for the threat model and private reporting instructions.
 
 Mermaid runs in strict mode with protected security configuration. Inputs are limited to 50,000 characters and 500 edges. Errors are displayed as text. Strict mode and size limits reduce risk; they do not make arbitrary imported diagrams a security sandbox.
 
 ## Known limitations and troubleshooting
 
-- Reading view is the supported view. Live Preview is not part of the release acceptance criteria.
+- **Reading view is supported; Live Preview is not supported.** Standard `mermaid` in Live Preview uses Obsidian’s separate editor rendering path. Dedicated blocks may appear there, but that does not establish Live Preview support.
+- Standard-block rendering uses an ordered Markdown postprocessor and leaves Obsidian’s renderer and other plugins’ registrations intact. Third-party Mermaid plugin compatibility has not been verified in Obsidian; use the OFF setting and dedicated blocks when combining renderers.
 - Mobile has not been tested. The browser-compatible code does not establish mobile compatibility.
 - Class/ER/State fall back to SVG with Mermaid 11.17.2 and converter 2.2.2. This secure dependency combination is preferred over downgrading Mermaid for conversion fidelity.
 - SVG fallback preserves upstream layout; Gantt date-axis labels can overlap in narrow views.
 - Appearance is normalized to monochrome; Mermaid's original colors are not preserved.
 - Very large diagrams may need panning because Excalidraw's minimum zoom is 10%. Expensive input can still block rendering; there is no hard timeout or worker isolation.
+- Resource-capable source is not supported, including benign extended node metadata, URL text, backslash escapes and entity syntax. Refusal happens before conversion and does not affect other diagrams.
 - The bundle includes diagram renderers and fonts and is relatively large.
 
 If nothing appears, check the block language, plugin enablement and Reading view. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).
@@ -148,6 +159,7 @@ Use Node.js 22.13+ within the 22 series, or 24+, and npm 10+. Node.js is only re
 ```sh
 npm ci
 npm run lint
+npm run typecheck
 npm test
 npm run test:release
 npm run build
