@@ -130,7 +130,7 @@ Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In v
 
 No payment, account, ads or telemetry are required or included. The plugin does not scan your vault, modify notes, access files outside the vault, or install/update itself or its dependencies. Only plugin settings are saved through Obsidian's public API.
 
-Rendering uses bundled JavaScript and fonts and works offline. Before calling the converter, both standard and dedicated blocks reject resource-capable source with an inline error: image/node metadata (`@{…}`), resource HTML attributes/tags, Markdown images, CSS image/import syntax and URLs. Backslash escapes, HTML/Mermaid entities and CSS comments are also refused because they can conceal those constructs. This conservative policy can reject harmless labels, comments, escaped text and non-image node metadata; simplify the source to use this renderer.
+Rendering uses bundled JavaScript and fonts and works offline. Before calling the converter, both standard and dedicated blocks reject resource-capable source with an inline error: image/node metadata (`@{…}`), Sequence `properties`/`details` (including actor icons), resource HTML attributes/tags, Markdown images, CSS image/import syntax and URLs. Backslash escapes, HTML/Mermaid entities and CSS comments are also refused because they can conceal those constructs. This conservative policy can reject harmless labels, comments, escaped text and non-image metadata, including any occurrence of the words `properties` or `details`; simplify the source to use this renderer.
 
 The plugin does not use Obsidian’s built-in Mermaid trust prompt. The source guard applies even when a vault is trusted and cannot be disabled for dedicated blocks. Turning the standard-block setting OFF returns standard blocks to Obsidian’s renderer and its own trust behavior; this plugin’s guard no longer processes those blocks. Diagram links are prevented from opening through this plugin’s canvas. See [SECURITY.md](SECURITY.md) for the threat model and private reporting instructions.
 
@@ -145,7 +145,7 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 - SVG fallback preserves upstream layout; Gantt date-axis labels can overlap in narrow views.
 - Appearance is normalized to monochrome; Mermaid's original colors are not preserved.
 - Very large diagrams may need panning because Excalidraw's minimum zoom is 10%. Expensive input can still block rendering; there is no hard timeout or worker isolation.
-- Resource-capable source is not supported, including benign extended node metadata, URL text, backslash escapes and entity syntax. Refusal happens before conversion and does not affect other diagrams.
+- Resource-capable source is not supported, including benign extended node metadata, `properties`/`details` keywords, URL text, backslash escapes and entity syntax. Refusal happens before conversion and does not affect other diagrams.
 - The bundle includes diagram renderers and fonts and is relatively large.
 
 If nothing appears, check the block language, plugin enablement and Reading view. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).

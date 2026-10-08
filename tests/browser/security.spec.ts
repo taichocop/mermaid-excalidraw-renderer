@@ -43,6 +43,10 @@ test("standard and dedicated blocks reject resource syntax before any network re
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZ8AAAAASUVORK5CYII=", "base64") });
   });
   const sources = [
+    'sequenceDiagram\nparticipant A\nproperties A: {"icon": "/relative-image.png"}\nA->>A: Safe',
+    'sequenceDiagram\nparticipant A\nproperties A: {"icon": "relative-image.png"}\nA->>A: Safe',
+    'sequenceDiagram;participant A;PrOpErTiEs A: {"icon": "/relative-image.png"}',
+    'sequenceDiagram\nparticipant A\ndetails A: sequence-resource-metadata\nA->>A: Safe',
     'flowchart LR\nA@{ img: "https://security-test.invalid/image.png", label: "Remote", h: 40 } --> B[Local]',
     'flowchart LR\nA@{ img: "//security-test.invalid/image.png" }',
     'flowchart LR\nA@{ img: "/relative-image.png" }',
@@ -64,17 +68,25 @@ classDef net fill:u\72l(/relative-image.png)`,
     '---\nconfig:\n  themeVariables:\n    fontFamily: "Arial; background-image: url(/relative-image.png)"\n---\nflowchart LR\nA[Local]',
     '%%{init: {"themeCSS":"@import \'/relative-style.css\';"}}%%\nflowchart LR\nA[Local]',
   ];
+  await page.evaluate(() => {
+    // Upstream details imports actor properties from a host DOM element.
+    const metadata = document.createElement("div");
+    metadata.id = "sequence-resource-metadata";
+    metadata.textContent = JSON.stringify({ properties: { icon: "/relative-image.png" } });
+    document.body.append(metadata);
+  });
   for (const language of ["mermaid", "mermaid-excalidraw"]) {
     await page.evaluate(({ sources, language }) => {
       for (const source of sources) window.harness.mount(source, language);
-      window.harness.mountSamples(["flowchart", "class"], language);
+      window.harness.mountSamples(["flowchart", "sequence", "class"], language);
     }, { sources, language });
   }
   await expect(page.locator('[data-state="error"]')).toHaveCount(sources.length * 2);
-  await expect(page.locator('[data-state="ready"]')).toHaveCount(4);
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(6);
   const messages = await page.locator(".mermaid-excalidraw-error-detail").allTextContents();
   expect(messages.every((message) => message.includes("Resource-capable Mermaid syntax is not supported"))).toBe(true);
   expect(requests).toEqual([]);
+  await page.evaluate(() => document.getElementById("sequence-resource-metadata")?.remove());
   await page.evaluate(() => window.harness.disable());
   await expect(page.locator("canvas")).toHaveCount(0);
   expect(errors).toEqual([]);

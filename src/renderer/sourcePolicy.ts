@@ -7,6 +7,9 @@ const RESOURCE_CAPABLE_SYNTAX: readonly RegExp[] = [
   // Node metadata is YAML: even its img key can be quoted/escaped or aliased.
   // Refuse the entire extended-metadata surface instead of parsing its fields.
   /@\s*\{/u,
+  // Sequence properties can set icon URLs without @{...}; details can import
+  // those properties from host DOM. Refuse both keywords, including benign text.
+  /\b(?:properties|details)\b/iu,
   // HTML/Mermaid entities and JSON/YAML/CSS escapes can disguise resource text.
   /\\|&(?:#|[a-z][a-z\d]*;)|#(?:\d+|x[\da-f]+|[a-z][a-z\d]*);|ﬂ°|¶ß/iu,
   // Image/resource elements and attributes, including relative URLs.
@@ -21,6 +24,6 @@ const RESOURCE_CAPABLE_SYNTAX: readonly RegExp[] = [
 
 export function rejectResourceSyntax(source: string): void {
   if (RESOURCE_CAPABLE_SYNTAX.some((pattern) => pattern.test(source))) {
-    throw new Error("Resource-capable Mermaid syntax is not supported: remove image/node metadata, resource HTML/CSS, URLs, escapes or entities.");
+    throw new Error("Resource-capable Mermaid syntax is not supported: remove image/node metadata, properties/details, resource HTML/CSS, URLs, escapes or entities.");
   }
 }
