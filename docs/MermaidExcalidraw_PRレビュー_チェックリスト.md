@@ -1,6 +1,6 @@
 # Mermaid Excalidraw Renderer PRレビュー チェックリスト
 
-最終更新: 2026-10-07
+最終更新: 2026-10-08
 
 ## 要件
 
@@ -65,3 +65,11 @@
 - [ ] READMEを必要に応じて更新した
 - [ ] Breaking changeならADR/CHANGELOGを更新した
 
+## Stably Orca内の開発運用
+
+- [ ] Issueごとに1 worktree、同PRの修正・push担当controllerは1つ
+- [ ] 実装sessionと別read-only reviewer sessionで独立レビューし、指摘を戻した（最大5回）
+- [ ] 検証対象HEADと結果を記録し、browser検証はIssue間で直列化した
+- [ ] 最新HEADのReview・required CIを確認し、未実行の検証を成功扱いにしていない
+- [ ] 設定・認証・runtime・履歴がstaged diffに含まれていない
+- [ ] Human mergeを保持し、手動レビューをHarnessの正式READY認定と混同していない
