@@ -66,6 +66,14 @@ jobs:
           cd release-assets
           sha256sum --check SHA256SUMS.txt
           cd ..
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --draft \
-            --title "Mermaid Excalidraw Renderer $RELEASE_TAG" \
-            --notes-file "docs/releases/$RELEASE_TAG.md"
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > "$RUNNER_TEMP/release-draft-state"; then
+            test "$(cat "$RUNNER_TEMP/release-draft-state")" = true
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA" \
+              --title "Mermaid Excalidraw Renderer $RELEASE_TAG" \
+              --notes-file "docs/releases/$RELEASE_TAG.md"
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --verify-tag --draft \
+              --title "Mermaid Excalidraw Renderer $RELEASE_TAG" \
+              --notes-file "docs/releases/$RELEASE_TAG.md"
+          fi
