@@ -29,7 +29,7 @@ jobs:
             reviewId:(.review.id // .comment.pull_request_review_id),
             commitId:(.review.commit_id // .comment.commit_id),
             pr:(.pull_request.number // .issue.number)}' "$GITHUB_EVENT_PATH" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: review-event-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/review-event/

@@ -135,11 +135,13 @@ async function attest() {
     validation: { headSha: value.plan.headSha, lint: true, typecheck: true, tests: true, build: true, browser: true } });
 }
 async function publish() {
-  const value = read('validated.json'), plan = value.plan;
+  const value = read('validated.json'), candidate = read('candidate.json'), plan = candidate.plan;
+  if (hash(value.plan) !== hash(plan)) throw new Error('Validated plan does not match immutable candidate');
   if (!value.validation || value.validation.headSha !== plan.headSha
     || !['lint', 'typecheck', 'tests', 'build', 'browser'].every(key => value.validation[key] === true)) throw new Error('Missing validation evidence');
   await loop.assertPlan(plan); // before applying/committing and again at push reservation
-  applyCandidate(value);
+  applyCandidate(candidate);
+  if (hash(git(['diff', '--binary', 'HEAD'])) !== value.patchHash) throw new Error('Validated patch does not match original candidate');
   if (git(['write-tree']).trim() !== value.treeSha) throw new Error('Validated tree mismatch');
   if (plan.mode === 'fix') {
     if (!env.AGENT_LOOP_TOKEN) throw new Error('Missing push credential');
