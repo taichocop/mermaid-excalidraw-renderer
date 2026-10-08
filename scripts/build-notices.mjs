@@ -15,13 +15,29 @@ export const bundledNotices = {
         const name = remainder.split("/").slice(0, remainder.startsWith("@") ? 2 : 1).join("/");
         packages.add(input.slice(0, marker) + "node_modules/" + name);
       }
-      const notices = ["Third-party notices for Mermaid Excalidraw Renderer\n"];
+      const notices = ["Mermaid Excalidraw Renderer\n", await readFile("LICENSE", "utf8"),
+        "\nThird-party notices for Mermaid Excalidraw Renderer\n"];
       for (const path of [...packages].sort()) {
         const pkg = JSON.parse(await readFile(resolve(path, "package.json"), "utf8"));
         notices.push(`\n${pkg.name}@${pkg.version} (${typeof pkg.license === "string" ? pkg.license : "see license text"})\n`);
-        const files = (await readdir(path)).filter((name) => /^(licen[cs]e|copying|notice)(\.|$)/i.test(name));
+        const files = (await readdir(path)).filter((name) => /^(licen[cs]e|copying|notice)([._-]|$)/i.test(name));
         for (const file of files) notices.push(await readFile(resolve(path, file), "utf8"));
-        if (pkg.name === "@excalidraw/excalidraw") notices.push(await readFile("licenses/excalidraw-LICENSE.txt", "utf8"));
+        if (files.length === 0) {
+          if (pkg.name === "@excalidraw/excalidraw") {
+            notices.push(await readFile("licenses/excalidraw-LICENSE.txt", "utf8"));
+          } else if (pkg.name.startsWith("@radix-ui/")) {
+            notices.push(await readFile("licenses/packages/radix-primitives-LICENSE.txt", "utf8"));
+          } else if (pkg.name === "react-remove-scroll-bar") {
+            notices.push(await readFile("licenses/packages/react-remove-scroll-bar-LICENSE.txt", "utf8"));
+          } else if (pkg.name === "fastdom") {
+            const readme = await readFile(resolve(path, "README.md"), "utf8");
+            const heading = readme.indexOf("## License");
+            if (heading < 0) throw new Error(`Missing license text for ${pkg.name}`);
+            notices.push(readme.slice(heading));
+          } else {
+            throw new Error(`Missing license text for bundled dependency ${pkg.name}@${pkg.version}`);
+          }
+        }
       }
       notices.push("\nExcalidraw font notices (font metadata and upstream licenses)\n");
       for (const file of (await readdir("licenses/fonts")).sort()) {
