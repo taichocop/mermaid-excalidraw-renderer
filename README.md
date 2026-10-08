@@ -21,7 +21,11 @@ SVG fallback preserves Mermaid geometry: it does not turn every diagram type int
 
 ### Community directory
 
-This release is being prepared for submission and is **not yet listed**. After approval, open **Settings → Community plugins → Browse**, search for **Mermaid Excalidraw Renderer**, install it and enable it.
+[Mermaid Excalidraw Renderer is listed in the Community Directory](https://community.obsidian.md/plugins/mermaid-excalidraw-renderer). Use [Add to Obsidian](obsidian://show-plugin?id=mermaid-excalidraw-renderer), or install from within Obsidian:
+
+1. Open **Settings → Community plugins → Browse**.
+2. Search for **Mermaid Excalidraw Renderer** and open its entry.
+3. Select **Install**, then **Enable**.
 
 ### Manual installation
 
