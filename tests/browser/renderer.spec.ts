@@ -67,17 +67,36 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
     ...Array.from({ length: 2 }, () => ({ count: expect.any(Number), imageFallback: false })),
     ...Array.from({ length: 6 }, () => ({ count: 1, imageFallback: true })),
   ]);
-  await expect.poll(async () => (await scenePixels(page)).every((scene) => scene.ink > 100 && scene.colored === 0
-    && scene.background.every((value) => value === 255))).toBe(true);
+  // The child's ready state marks conversion, while scene initialization and
+  // fitting wait for Virgil. Start the bounded pixel checks after that actual
+  // prerequisite, rather than racing font loading on a cold browser.
+  await page.evaluate(async () => {
+    await document.fonts.load("20px Virgil");
+    await document.fonts.ready;
+  });
+  expect(await page.evaluate(() => document.fonts.check("20px Virgil"))).toBe(true);
+  const diagrams = ["flowchart", "sequence", "class", "er", "state", "gantt", "pie", "timeline"];
+  const expectScenes = async (background: number) => {
+    // Keep each scene's measured values in assertion failures. A single false
+    // predicate loses which diagram/color/layout is still incorrect.
+    await expect.poll(async () => (await scenePixels(page)).map((scene, index) => ({
+      diagram: diagrams[index], background: scene.background, ink: scene.ink,
+      hasInk: scene.ink > 100, colored: scene.colored, filter: scene.filter,
+      fitted: scene.left >= 16 && scene.right < scene.width - 16
+        && scene.top >= 16 && scene.bottom < scene.height - 48,
+    }))).toEqual(diagrams.map((diagram) => ({
+      diagram, background: [background, background, background], ink: expect.any(Number),
+      hasInk: true, colored: 0, filter: "none", fitted: true,
+    })));
+  };
+  await expectScenes(255);
   await page.locator("main").screenshot({ path: "test-results/diagrams-light.png" });
   await page.evaluate(() => window.harness.theme(true));
   await expect(page.locator(".excalidraw.theme--dark")).toHaveCount(8);
-  await expect.poll(async () => (await scenePixels(page)).every((scene) => scene.ink > 100 && scene.colored === 0
-    && scene.background.every((value) => value === 30) && scene.filter === "none")).toBe(true);
+  await expectScenes(30);
   await page.locator("main").screenshot({ path: "test-results/diagrams-dark.png" });
   await page.evaluate(() => window.harness.theme(false));
-  await expect.poll(async () => (await scenePixels(page)).every((scene) => scene.ink > 100
-    && scene.background.every((value) => value === 255))).toBe(true);
+  await expectScenes(255);
   expect(errors).toEqual([]);
   expect(remoteRequests).toEqual([]);
 });
