@@ -14,7 +14,6 @@ export class SettingsTab extends PluginSettingTab {
 
   display(): void {
     this.containerEl.empty();
-    new Setting(this.containerEl).setName("Appearance").setHeading();
     new Setting(this.containerEl)
       .setName("Font size")
       .setDesc("Diagram text size in pixels (12–48). Changes apply to open diagrams.")

@@ -43,6 +43,12 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
       || /warning/i.test(message.text())) errors.push(message.text());
   });
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const remoteRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/^https?:/.test(request.url()) && !request.url().startsWith("http://127.0.0.1:")) {
+      remoteRequests.push(request.url());
+    }
+  });
   expect(await page.evaluate(() => window.harness.registeredLanguages())).toEqual(["mermaid-excalidraw"]);
   await page.evaluate(() => window.harness.mountSamples(["flowchart", "sequence", "class", "er", "state", "gantt", "pie", "timeline"]));
   await expect(page.locator('[data-state="ready"]')).toHaveCount(8);
@@ -66,12 +72,13 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
   await expect.poll(async () => (await scenePixels(page)).every((scene) => scene.ink > 100
     && scene.background.every((value) => value === 255))).toBe(true);
   expect(errors).toEqual([]);
+  expect(remoteRequests).toEqual([]);
 });
 
 test("Appearance controls persist and redraw roughness 0/1/2 on an open diagram", async ({ page }) => {
   await page.evaluate(() => { window.harness.mountSamples(["flowchart"]); window.harness.openSettings(); });
   await expect.poll(async () => (await scenePixels(page))[0]?.ink ?? 0).toBeGreaterThan(100);
-  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Font size", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Theme", exact: true })).toHaveValue("follow-obsidian");
   const images = new Set<string>();
   for (const roughness of [0, 1, 2]) {

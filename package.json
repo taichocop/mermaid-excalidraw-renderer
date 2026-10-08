@@ -4,16 +4,22 @@
   "private": true,
   "description": "Render Mermaid diagrams as Excalidraw-style diagrams in Obsidian.",
   "license": "MIT",
-  "engines": { "node": "^22.13.0 || >=24.0.0", "npm": ">=10" },
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "build": "npm run validate:manifest && npm run typecheck && node esbuild.config.mjs production && npm run validate:release",
+    "validate:manifest": "node scripts/validate-release.mjs --metadata-only",
+    "validate:release": "node scripts/validate-release.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:browser:serve": "node tests/browser/serve.mjs",
-    "test:vault": "npm run build && node scripts/prepare-test-vault.mjs"
+    "test:vault": "npm run build && node scripts/prepare-test-vault.mjs",
+    "test:release": "node --test tests/release/*.test.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",
