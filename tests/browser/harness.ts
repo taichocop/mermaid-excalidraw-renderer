@@ -1,5 +1,6 @@
 import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
+import type { DiagramData } from "../../src/renderer/conversion";
 import { samples } from "./samples";
 
 interface TestPlugin extends mock.Plugin {
@@ -46,6 +47,30 @@ const harness = {
       const data: unknown = Reflect.get(child, "data");
       if (typeof data !== "object" || data === null || !("elements" in data) || !Array.isArray(data.elements)) return null;
       return { count: data.elements.length, imageFallback: "files" in data && data.files !== undefined };
+    });
+  },
+  // Test-only converter diagnostics. Keep sceneSummaries' existing shape and
+  // never insert decoded SVG into the host DOM or call private Excalidraw APIs.
+  conversionDiagnostics() {
+    return [...children].map((child) => {
+      const value: unknown = Reflect.get(child, "data");
+      if (typeof value !== "object" || value === null || !("elements" in value) || !Array.isArray(value.elements)) return null;
+      const data = value as DiagramData;
+      return {
+        elements: data.elements.map((element) => ({ type: element.type, width: element.width, height: element.height })),
+        files: Object.values(data.files ?? {}).map((file) => {
+          if (file.mimeType !== "image/svg+xml" || !file.dataURL.startsWith("data:image/svg+xml;base64,")) return { mimeType: file.mimeType, svg: null };
+          const bytes = Uint8Array.from(atob(file.dataURL.slice(file.dataURL.indexOf(",") + 1)), (char) => char.charCodeAt(0));
+          const source = new TextDecoder().decode(bytes);
+          const svg = new DOMParser().parseFromString(source, "image/svg+xml").documentElement;
+          return { mimeType: file.mimeType, svg: {
+            source, width: Number(svg.getAttribute("width")), height: Number(svg.getAttribute("height")),
+            viewBox: svg.getAttribute("viewBox"),
+            labels: [...svg.querySelectorAll("foreignObject, text")].map((label) => label.textContent?.trim()),
+            connectors: svg.querySelectorAll("path[marker-end]").length,
+          } };
+        }),
+      };
     });
   },
 };
