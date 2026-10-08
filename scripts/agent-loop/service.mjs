@@ -176,7 +176,7 @@ export class AgentLoop {
     }
     const data = await this.api.ciData(pr);
     if (pr.mergeable !== true || !ciGreen(data.runs, data.checks, data.statuses, pr.head.sha,
-      data.workflowId, data.ignoredRunIds, data.required, pr.number)) {
+      data.workflowId, data.ignoredRunIds, data.required, pr.number, pr.base)) {
       await this.save(record, { ...state, state: 'WAITING_FOR_CI' }, pr); return 'WAITING_FOR_CI';
     }
     const freshPR = await this.api.repo(`/pulls/${pr.number}`);

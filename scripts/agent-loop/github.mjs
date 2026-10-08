@@ -122,7 +122,7 @@ export class GitHub {
       if (protection.errors || !protection.data?.repository?.ref) throw new Error('Cannot verify required CI checks');
       required = (protection.data.repository.ref.branchProtectionRule?.requiredStatusChecks ?? [])
         .map(check => ({ context: check.context, app_id: check.app?.databaseId ?? null }));
-      const rules = await this.repo(`/rules/branches/${encodeURIComponent(pr.base.ref)}`);
+      const rules = await this.pages(`/rules/branches/${encodeURIComponent(pr.base.ref)}`);
       required.push(...rules.filter(rule => rule.type === 'required_status_checks')
         .flatMap(rule => rule.parameters.required_status_checks)
         .map(check => ({ context: check.context, app_id: check.integration_id ?? null })));

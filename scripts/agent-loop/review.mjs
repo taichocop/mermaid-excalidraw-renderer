@@ -41,7 +41,7 @@ export function buildContext(pr, data, identity = CODEX_IDENTITY) {
   observations.sort((a, b) => a.commentId - b.commentId);
   findings.sort((a, b) => a.commentId - b.commentId);
   sources.sort((a, b) => a.id.localeCompare(b.id));
-  const context = { pullRequest: pr.number, headSha: pr.head.sha, reviewedHeadSha, reviewId, phase,
+  const context = { pullRequest: pr.number, base: pr.base ? { ref: pr.base.ref, sha: pr.base.sha } : null, headSha: pr.head.sha, reviewedHeadSha, reviewId, phase,
     summary: summary ? { id: summary.id, epoch: summary.epoch, phase: summary.phase, sha: summary.sha, body: summary.body } : null,
     reviews: reviews.map(review => ({ id: review.id, state: review.state, body: review.body || '', sha: review.commit_id })),
     findings, sources, observations };

@@ -35,6 +35,13 @@ export function isCodex(user, identity = CODEX_IDENTITY, app = null) {
   return user?.type === 'Bot' && user.login === identity.login && String(user.id) === String(identity.id)
     && (!app || (String(app.id) === String(identity.appId) && app.slug === identity.appSlug));
 }
+export function isCodexReviewEvent(name, event, identity = CODEX_IDENTITY) {
+  const item = name === 'pull_request_review' ? event.review : event.comment;
+  const invalidating = (name === 'pull_request_review' && event.action === 'dismissed')
+    || (name === 'pull_request_review_comment' && event.action === 'deleted');
+  return isCodex(item?.user, identity, item?.performed_via_github_app)
+    && (invalidating || isCodex(event.sender, identity));
+}
 export const eligible = (pr, repo) => pr.state === 'open' && !pr.draft
   && pr.head.repo?.full_name === repo && pr.base.repo?.full_name === repo
   && pr.labels.some(label => label.name === 'agent-loop');
@@ -95,10 +102,11 @@ export function parseAnalysis(result, sources) {
   }
   return result.findings;
 }
-export function ciGreen(runs, checks, statuses, headSha, workflowId, ignoredRunIds = [], required = [], prNumber) {
+export function ciGreen(runs, checks, statuses, headSha, workflowId, ignoredRunIds = [], required = [], prNumber, base) {
   const validation = runs.filter(run => (workflowId ? run.workflow_id === workflowId
     : run.path?.split('@')[0] === '.github/workflows/ci.yml') && run.head_sha === headSha && run.event === 'pull_request'
-    && Number.isSafeInteger(prNumber) && run.pull_requests?.some(pr => pr.number === prNumber))
+    && Number.isSafeInteger(prNumber) && base?.ref && base?.sha
+    && run.pull_requests?.some(pr => pr.number === prNumber && pr.base?.ref === base.ref && pr.base?.sha === base.sha))
     .sort((a, b) => b.id - a.id)[0];
   if (validation?.status !== 'completed' || validation.conclusion !== 'success') return false;
   const latest = new Map();

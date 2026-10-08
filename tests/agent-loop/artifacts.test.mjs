@@ -12,12 +12,12 @@ function checkout(t) {
   const git = args => execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: work, encoding: 'utf8' }).trim();
   git(['init', '-q']); writeFileSync(join(work, 'file.txt'), 'before\n'); git(['add', '.']);
   git(['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'base']);
-  const headSha = git(['rev-parse', 'HEAD']);
+  const headSha = git(['rev-parse', 'HEAD']), output = join(root, 'step-output');
   const run = command => spawnSync(process.execPath, [runner, command], { cwd: root, encoding: 'utf8',
     env: { ...process.env, GH_TOKEN: '', AGENT_LOOP_INTERACTIVE: 'false', PR_NUMBER: '1',
-      LOOP_DIR: loop, WORK_DIR: work, REVIEW_START_GRACE_PERIOD_SECONDS: '420' } });
+      LOOP_DIR: loop, WORK_DIR: work, GITHUB_OUTPUT: output, REVIEW_START_GRACE_PERIOD_SECONDS: '420' } });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  return { work, loop, git, headSha, run };
+  return { work, loop, git, headSha, run, output };
 }
 test('fresh validation applies only the candidate and attests the exact canonical patch/tree', t => {
   const h = checkout(t);
@@ -76,7 +76,7 @@ test('gitlink additions are rejected and expose the protected failure classifica
   const patch = 'diff --git a/dependency b/dependency\nnew file mode 160000\nindex 0000000..aaaaaaa\n--- /dev/null\n+++ b/dependency\n@@ -0,0 +1 @@\n+Subproject commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n';
   writeFileSync(join(h.loop, 'candidate.json'), JSON.stringify({ patch, patchHash: hash(patch), plan: { headSha: h.headSha } }));
   const result = h.run('materialize'); assert.notEqual(result.status, 0); assert.match(result.stderr, /protected-path/);
-  assert.match(result.stdout, /failure_kind=protected-path/);
+  assert.match(readFileSync(h.output, 'utf8'), /failure_kind=protected-path/);
   assert.equal(h.git(['status', '--porcelain']), '');
 });
 test('failure job carries protected-path outputs and plan can reclaim terminated Actions leases', () => {
