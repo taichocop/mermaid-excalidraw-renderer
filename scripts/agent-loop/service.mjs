@@ -110,10 +110,10 @@ export class AgentLoop {
       await this.api.removeReady(pr.number);
       await this.save(record, { ...processed(state, plan.context, actionable.map(item => item.id)),
         state: 'LOOP_LIMIT_REACHED', lease: null }, pr);
-      return { ...plan, mode: 'skip', findings };
+      return { ...plan, mode: 'skip', state: 'LOOP_LIMIT_REACHED', findings };
     }
     await this.save(record, { ...state, state: actionable.length ? 'FIXING' : 'VALIDATING', analysis: findings }, pr);
-    return { ...plan, mode: actionable.length ? 'fix' : 'clean', findings };
+    return { ...plan, mode: actionable.length ? 'fix' : 'clean', state: actionable.length ? 'FIXING' : 'VALIDATING', findings };
   }
   async enterValidation(plan) {
     const { pr, record, state } = await this.assertPlan(plan);
@@ -172,7 +172,7 @@ export class AgentLoop {
     }
     const data = await this.api.ciData(pr);
     if (pr.mergeable !== true || !ciGreen(data.runs, data.checks, data.statuses, pr.head.sha,
-      data.workflowId, data.ignoredRunIds, data.required)) {
+      data.workflowId, data.ignoredRunIds, data.required, pr.number)) {
       await this.save(record, { ...state, state: 'WAITING_FOR_CI' }, pr); return 'WAITING_FOR_CI';
     }
     const freshPR = await this.api.repo(`/pulls/${pr.number}`);

@@ -158,9 +158,8 @@ jobs:
           artifact-ids: ${{ needs.decide.outputs.artifact_id }}
           merge-multiple: true
           path: loop/
-      - name: Install dependencies without API or push credentials
-        working-directory: work
-        run: npm ci
+      # Never execute PR install hooks on the secret-bearing Codex runner.
+      # Dependencies and all package scripts run only in fresh validation.
       - id: codex
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
         with:

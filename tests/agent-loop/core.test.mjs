@@ -95,21 +95,21 @@ test('analysis requires all source IDs exactly once; no severity-based omission'
   assert.throws(() => parseAnalysis({ findings: [{ id: 'one', status: 'resolved', reason: 'fixed' }, { id: 'one', status: 'resolved', reason: 'fixed' }] }, sources));
   assert.equal(parseAnalysis({ findings: sources.map(s => ({ ...s, status: 'actionable', reason: 'Concrete defect' })) }, sources).length, 2);
 });
-const run = { id: 1, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: sha, event: 'pull_request', status: 'completed', conclusion: 'success' };
+const run = { pull_requests: [{ number: 1 }], id: 1, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: sha, event: 'pull_request', status: 'completed', conclusion: 'success' };
 const check = { id: 1, name: 'validate', app: { id: 1 }, status: 'completed', conclusion: 'success' };
 test('CI uses stable workflow ID or strips @ref, and cannot trust old/push CI', () => {
-  assert.equal(ciGreen([run], [check], [], sha, 42), true);
-  assert.equal(ciGreen([run], [check], [], sha, null), true);
-  assert.equal(ciGreen([{ ...run, head_sha: other }], [], [], sha, 42), false);
-  assert.equal(ciGreen([{ ...run, event: 'push' }], [], [], sha, 42), false);
-  assert.equal(ciGreen([], [], [], sha, 42), false);
+  assert.equal(ciGreen([run], [check], [], sha, 42, [], [], 1), true);
+  assert.equal(ciGreen([run], [check], [], sha, null, [], [], 1), true);
+  assert.equal(ciGreen([{ ...run, head_sha: other }], [], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([{ ...run, event: 'push' }], [], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([], [], [], sha, 42, [], [], 1), false);
 });
 test('pending, failed, missing required checks block readiness and later completion passes', () => {
   const pending = { ...check, id: 2, name: 'external', status: 'in_progress', conclusion: null };
-  assert.equal(ciGreen([run], [check, pending], [], sha, 42), false);
-  assert.equal(ciGreen([run], [check, { ...pending, status: 'completed', conclusion: 'success' }], [], sha, 42), true);
-  assert.equal(ciGreen([run], [check], [], sha, 42, [], [{ context: 'missing' }]), false);
-  assert.equal(ciGreen([run], [check], [{ id: 2, context: 'security', state: 'failure' }], sha, 42), false);
+  assert.equal(ciGreen([run], [check, pending], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([run], [check, { ...pending, status: 'completed', conclusion: 'success' }], [], sha, 42, [], [], 1), true);
+  assert.equal(ciGreen([run], [check], [], sha, 42, [], [{ context: 'missing' }], 1), false);
+  assert.equal(ciGreen([run], [check], [{ id: 2, context: 'security', state: 'failure' }], sha, 42, [], [], 1), false);
 });
 test('fifth fix is the last; final review can still certify clean', () => {
   assert.equal(lifecycleDecision({ ...onHead(initialState(), sha), iteration: 5 }, completed), 'analyze-only');
@@ -133,4 +133,14 @@ test('captured webhook metadata distinguishes stale reviewed commit from current
   assert.equal(meta.eventName, 'pull_request_review'); assert.equal(event.action, 'submitted');
   assert.equal(isCodex(event.review.user), true); assert.equal(event.review.id, 5449597296);
   assert.notEqual(event.review.commit_id, event.pull_request.head.sha);
+});
+test('another PR using the same HEAD cannot supply successful validation for this PR', () => {
+  const otherPR = { ...run, id: 99, pull_requests: [{ number: 2 }] };
+  for (const status of ['in_progress', 'completed']) {
+    const current = { ...run, status, conclusion: status === 'completed' ? 'failure' : null };
+    assert.equal(ciGreen([current, otherPR], [], [], sha, 42, [], [], 1), false);
+  }
+  assert.equal(ciGreen([otherPR], [], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([{ ...run, pull_requests: [] }], [], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([run, otherPR], [], [], sha, 42, [], [], 1), true);
 });

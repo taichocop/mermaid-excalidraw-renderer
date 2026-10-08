@@ -53,3 +53,21 @@ test('publisher downloads original candidate by immutable ID independently of va
   assert.match(publisher, /needs.candidate.outputs.artifact_id/); assert.match(publisher, /needs.validate.outputs.artifact_id/);
   assert.doesNotMatch(publisher, /npm |openai\/codex-action/);
 });
+test('renaming a protected preimage to an ordinary destination fails before workspace mutation', t => {
+  const h = checkout(t);
+  mkdirSync(join(h.work, '.github/workflows'), { recursive: true });
+  writeFileSync(join(h.work, '.github/workflows/ci.yml'), 'name: Validate\n');
+  h.git(['add', '.']); h.git(['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'workflow']);
+  const headSha = h.git(['rev-parse', 'HEAD']);
+  h.git(['mv', '.github/workflows/ci.yml', 'ci.yml']); const patch = h.git(['diff', '--binary', 'HEAD']) + '\n';
+  h.git(['reset', '--hard', headSha]);
+  writeFileSync(join(h.loop, 'candidate.json'), JSON.stringify({ patch, patchHash: hash(patch), plan: { headSha } }));
+  const result = h.run('materialize'); assert.notEqual(result.status, 0); assert.match(result.stderr, /protected-path/);
+  assert.equal(readFileSync(join(h.work, '.github/workflows/ci.yml'), 'utf8'), 'name: Validate\n');
+  assert.equal(h.git(['status', '--porcelain']), '');
+});
+test('the secret-bearing fix runner does not execute PR package scripts before Codex', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/agent-loop-iteration.yml', import.meta.url), 'utf8');
+  const fix = workflow.split('  fix:')[1].split('  candidate:')[0];
+  assert.doesNotMatch(fix, /run:.*(?:npm|npx|yarn|pnpm)/);
+});
