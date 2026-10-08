@@ -1,0 +1,324 @@
+name: Agent loop iteration
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Opt-in PR to process once
+        type: string
+        required: true
+      source_head_sha:
+        description: HEAD observed by dispatcher (empty for manual reconciliation)
+        type: string
+        required: false
+      source_event:
+        description: Originating event
+        type: string
+        required: false
+# This lock spans all fresh jobs in the one iteration.
+concurrency:
+  group: agent-loop-pr-${{ inputs.pr_number }}
+  cancel-in-progress: false
+  queue: max
+permissions:
+  contents: read
+  pull-requests: read
+env:
+  PR_NUMBER: ${{ inputs.pr_number }}
+  CODEX_REVIEW_LOGIN: ${{ vars.CODEX_REVIEW_LOGIN }}
+  CODEX_REVIEW_USER_ID: ${{ vars.CODEX_REVIEW_USER_ID }}
+  CODEX_REVIEW_APP_ID: ${{ vars.CODEX_REVIEW_APP_ID }}
+  MAX_AGENT_ITERATIONS: ${{ vars.MAX_AGENT_ITERATIONS || '5' }}
+  AGENT_LOOP_REVIEW_REQUEST_MODE: ${{ vars.AGENT_LOOP_REVIEW_REQUEST_MODE || 'comment-fallback' }}
+  REVIEW_START_GRACE_PERIOD_SECONDS: ${{ vars.REVIEW_START_GRACE_PERIOD_SECONDS || '420' }}
+  LOOP_DIR: ${{ github.workspace }}/loop
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      head_sha: ${{ steps.plan.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: plan
+        run: node controller/scripts/agent-loop/run.mjs plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-plan
+          path: loop/
+  analyze:
+    needs: plan
+    if: needs.plan.outputs.mode == 'analyze'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      result: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+          path: work
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-plan
+          path: loop/
+      # Last step: only action output crosses to a fresh runner.
+      - id: codex
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
+        with:
+          codex-version: '0.154.0'
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          working-directory: ${{ github.workspace }}/work
+          prompt-file: ${{ github.workspace }}/loop/analyze.txt
+          output-schema-file: ${{ github.workspace }}/controller/scripts/agent-loop/analysis.schema.json
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          allow-bots: true
+  decide:
+    needs: [plan, analyze]
+    if: needs.plan.outputs.mode == 'analyze'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      mode: ${{ steps.decide.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-plan
+          path: loop/
+      - id: decide
+        run: node controller/scripts/agent-loop/run.mjs decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANALYSIS_RESULT: ${{ needs.analyze.outputs.result }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-decided
+          path: loop/
+  fix:
+    needs: [plan, decide]
+    if: needs.decide.outputs.mode == 'fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      result: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+          path: work
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-decided
+          path: loop/
+      - name: Install dependencies without API or push credentials
+        working-directory: work
+        run: npm ci
+      - id: codex
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
+        with:
+          codex-version: '0.154.0'
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          working-directory: ${{ github.workspace }}/work
+          prompt-file: ${{ github.workspace }}/loop/fix.txt
+          output-schema-file: ${{ github.workspace }}/controller/scripts/agent-loop/fix.schema.json
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          allow-bots: true
+  candidate:
+    needs: [decide, fix]
+    if: >-
+      always() && needs.decide.result == 'success' &&
+      (needs.decide.outputs.mode == 'clean' ||
+      (needs.decide.outputs.mode == 'fix' && needs.fix.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-decided
+          path: loop/
+      - name: Package patch and enter VALIDATING
+        run: node controller/scripts/agent-loop/run.mjs candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIX_RESULT: ${{ needs.fix.outputs.result }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-candidate
+          path: loop/candidate.json
+  validate:
+    needs: [plan, candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+          path: work
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-candidate
+          path: loop/
+      - run: node controller/scripts/agent-loop/run.mjs materialize
+      - name: Validate candidate on a fresh runner
+        working-directory: work
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run lint
+          npm run typecheck
+          npm run test
+          npm run build
+          npm run test:browser
+      - name: Attest exact candidate tree
+        run: node controller/scripts/agent-loop/run.mjs attest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-validated
+          path: loop/validated.json
+  publish:
+    needs: [plan, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+          path: work
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-validated
+          path: loop/
+      # No package scripts or PR code run on this credential-bearing runner.
+      - run: node controller/scripts/agent-loop/run.mjs publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_LOOP_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
+  certify:
+    needs: plan
+    if: needs.plan.outputs.mode == 'ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: loop-plan
+          path: loop/
+      - run: node controller/scripts/agent-loop/run.mjs certify
+        env:
+          GH_TOKEN: ${{ github.token }}
+  failure:
+    needs: [plan, analyze, decide, fix, candidate, validate, publish, certify]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: controller
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node controller/scripts/agent-loop/run.mjs failed
+        env:
+          GH_TOKEN: ${{ github.token }}

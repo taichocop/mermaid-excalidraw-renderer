@@ -1,286 +1,177 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
-import { initialState } from '../../scripts/agent-loop/core.mjs';
+import { readFileSync } from 'node:fs';
+import { AgentLoop } from '../../scripts/agent-loop/service.mjs';
+import { CODEX_IDENTITY, initialState, hash } from '../../scripts/agent-loop/core.mjs';
+const sha = 'a'.repeat(40), next = 'b'.repeat(40);
+const actor = { login: CODEX_IDENTITY.login, id: Number(CODEX_IDENTITY.id), type: 'Bot' };
+const app = { id: Number(CODEX_IDENTITY.appId), slug: CODEX_IDENTITY.appSlug };
 
-const controller = resolve('scripts/agent-loop/run.mjs');
-const login = 'verified-codex[bot]';
-const user = { login, id: 101, type: 'Bot' };
-const review = { id: 7, user, commit_id: 'head', state: 'COMMENTED', submitted_at: '2026-10-08', body: 'Review summary' };
-const pr = { number: 1, state: 'open', draft: false, labels: [{ name: 'agent-loop' }],
-  head: { sha: 'head', ref: 'codex/fix', repo: { full_name: 'owner/repo' } },
-  base: { sha: 'base', repo: { full_name: 'owner/repo' } } };
-
-async function harness(t, overrides = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'agent-loop-test-'));
-  const bin = join(dir, 'bin');
-  mkdirSync(bin);
-  mkdirSync(join(dir, 'work'));
-  writeFileSync(join(bin, 'git'), `#!${process.execPath}
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-fs.appendFileSync(process.env.TEST_GIT_LOG, JSON.stringify(args) + '\\n');
-if (args[0] === 'rev-parse') console.log(fs.existsSync(process.env.TEST_COMMITTED) ? 'fixed-sha' : 'head');
-if (args[0] === 'status' && process.env.TEST_FIX === 'true') console.log(' M src/example.ts');
-if (args[0] === 'diff' && args.includes('--name-only') && !args.includes('--diff-filter=T') && process.env.TEST_FIX === 'true') console.log('src/example.ts');
-if (args.includes('commit')) fs.writeFileSync(process.env.TEST_COMMITTED, 'yes');
-`, { mode: 0o755 });
-  const planDir = join(dir, 'agent-loop-50-1');
-  mkdirSync(planDir);
-  const eventPath = join(dir, 'event.json');
-  const outputPath = join(dir, 'outputs');
-  writeFileSync(eventPath, JSON.stringify({ sender: user, review, pull_request: pr }));
-  writeFileSync(outputPath, '');
-  const state = { value: overrides.state || initialState(), calls: [], pr: structuredClone(pr), reviews: [review], ciGreen: false };
-  const server = createServer(async (request, response) => {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    state.calls.push({ method: request.method, url: request.url, body: body && JSON.parse(body) });
-    let value;
-    if (request.url.startsWith('/repos/owner/repo/contents/')) {
-      if (request.method === 'PUT') {
-        state.value = JSON.parse(Buffer.from(JSON.parse(body).content, 'base64').toString());
-        value = { content: { sha: 'new-file-sha' } };
-      } else value = { sha: 'file-sha', content: Buffer.from(JSON.stringify(state.value)).toString('base64') };
-    } else if (request.url === '/repos/owner/repo/pulls/1') value = state.pr;
-    else if (request.url.startsWith('/repos/owner/repo/pulls/1/reviews')) value = state.reviews;
-    else if (request.url.startsWith('/repos/owner/repo/pulls/1/comments')) value = [];
-    else if (request.url.startsWith('/repos/owner/repo/actions/runs')) value = { workflow_runs: [{
-      id: 40, path: '.github/workflows/ci.yml', head_sha: 'head', event: 'pull_request',
-      status: state.ciGreen ? 'completed' : 'in_progress', conclusion: state.ciGreen ? 'success' : null,
-    }] };
-    else if (request.url.startsWith('/repos/owner/repo/commits/head/check-runs')) value = { check_runs: [] };
-    else if (request.url.startsWith('/repos/owner/repo/commits/head/status')) value = { statuses: [] };
-    else if (request.method === 'POST' && request.url.endsWith('/labels')) value = {};
-    else if (request.url === '/graphql') value = { data: { repository: { pullRequest: {
-      reviewThreads: { nodes: [], pageInfo: { hasNextPage: false } },
-    } } } };
-    else if (request.method === 'DELETE' && request.url.endsWith('/labels/agent-ready')) { response.writeHead(204).end(); return; }
-    else { response.writeHead(500).end(JSON.stringify({ unexpected: request.url })); return; }
-    response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(value));
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(dir, { recursive: true, force: true }); });
-  const env = { ...process.env, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'fixture-token',
-    GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`, GITHUB_EVENT_PATH: eventPath,
-    GITHUB_EVENT_NAME: 'pull_request_review', CODEX_REVIEW_LOGIN: login, CODEX_REVIEW_USER_ID: '101',
-    CODEX_REVIEW_EVENTS: 'pull_request_review,pull_request_review_comment', MAX_AGENT_ITERATIONS: '5',
-    RUNNER_TEMP: dir, GITHUB_RUN_ID: '50', PR_NUMBER: '1', GITHUB_OUTPUT: outputPath,
-    GITHUB_STEP_SUMMARY: join(dir, 'summary'), PATH: `${bin}:${process.env.PATH}`,
-    TEST_GIT_LOG: join(dir, 'git-log'), TEST_COMMITTED: join(dir, 'committed') };
-  async function execute(command, extra = {}) {
-    const child = spawn(process.execPath, [controller, command], { cwd: dir, env: { ...env, ...extra } });
-    let output = '';
-    child.stdout.on('data', chunk => { output += chunk; });
-    child.stderr.on('data', chunk => { output += chunk; });
-    const code = await new Promise(resolve => child.on('close', resolve));
-    return { code, output, outputs: readFileSync(outputPath, 'utf8') };
+class FakeGitHub {
+  repository = 'owner/repo';
+  record = { value: null, sha: null };
+  phase = 'completed'; summarySha = sha; green = true; comments = []; threadsData = []; posts = []; mutations = [];
+  pr = { number: 1, state: 'open', draft: false, mergeable: true, labels: [{ name: 'agent-loop' }],
+    head: { sha, ref: 'codex/fix', repo: { full_name: 'owner/repo' } },
+    base: { sha: 'base', ref: 'main', repo: { full_name: 'owner/repo' } } };
+  async repo(path) {
+    if (path === '/pulls/1') return structuredClone(this.pr);
+    if (path.startsWith('/commits/')) return { sha: this.summarySha };
+    if (path.startsWith('/actions/runs/')) return { status: 'completed' };
+    throw new Error(`Unexpected API ${path}`);
   }
-  return { ...state, state, execute, planDir, eventPath, dir };
+  async pages(path) {
+    if (path === '/pulls/1/reviews') return this.phase === 'not-started' ? []
+      : [{ id: 7, user: actor, commit_id: this.summarySha, submitted_at: '2026-10-08T00:00:00Z', state: 'COMMENTED', body: 'Summary' }];
+    if (path === '/pulls/1/comments') return structuredClone(this.comments);
+    if (path === '/issues/1/comments') return this.phase === 'not-started' ? [] : [{
+      id: 8, user: actor, performed_via_github_app: app, updated_at: '2026-10-08T00:00:00Z',
+      body: `<!-- codex-pull-request-review-summary -->\n| 📝 **Code Review** | ✅ **${this.phase === 'running' ? 'Running' : 'Completed'}** <relative-time datetime="2026-10-08T00:00:00Z">now</relative-time> | \`${this.summarySha.slice(0, 7)}\` | PR opened |`,
+    }];
+    throw new Error(`Unexpected pages ${path}`);
+  }
+  async threads() { return structuredClone(this.threadsData); }
+  async loadState() { return this.record; }
+  async saveState(record, value) { record.value = structuredClone(value); record.sha = 'saved'; this.mutations.push(value.state); }
+  async removeReady() { this.pr.labels = this.pr.labels.filter(label => label.name !== 'agent-ready'); }
+  async addReady() { this.pr.labels.push({ name: 'agent-ready' }); }
+  async addComment(number, body) { this.posts.push(body); return { id: this.posts.length }; }
+  async resolveThread(id) { this.threadsData.find(thread => thread.id === id).isResolved = true; }
+  async ciData() { return { workflowId: 42, ignoredRunIds: [], required: [], checks: [], statuses: [], runs: [{
+    id: 10, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: this.pr.head.sha,
+    event: 'pull_request', status: this.green ? 'completed' : 'in_progress', conclusion: this.green ? 'success' : null,
+  }] }; }
+  addFinding() {
+    this.comments.push({ id: 100, user: actor, body: 'Concrete defect', commit_id: sha, pull_request_review_id: 7 });
+    this.threadsData.push({ id: 'thread', isResolved: false, isOutdated: false, line: 1, path: 'src/a.ts',
+      comments: { nodes: [{ databaseId: 100, body: 'Concrete defect', author: { login: actor.login } }] } });
+  }
 }
-
-test('unverified configuration never analyzes or mutates state', async t => {
-  const h = await harness(t);
-  const result = await h.execute('prepare', { CODEX_REVIEW_USER_ID: '' });
-  assert.equal(result.code, 0, result.output);
-  assert.match(result.outputs, /mode=skip/);
-  assert.equal(h.state.calls.some(call => call.method === 'PUT'), false);
-});
-
-test('fresh review persists analysis plan and returns immediately', async t => {
-  const h = await harness(t);
-  const result = await h.execute('prepare');
-  assert.equal(result.code, 0, result.output);
-  assert.match(result.outputs, /mode=analyze/);
-  assert.equal(h.state.value.state, 'ANALYZING');
-  assert.equal(h.state.value.iteration, 0);
-  assert.equal(JSON.parse(readFileSync(join(h.planDir, 'plan.json'))).context.review.id, 7);
-});
-
-test('summary and inline duplicate events never fix again', async t => {
-  const h = await harness(t, { state: { ...initialState(), processedReviewIds: [7], lastProcessedReviewId: 7 } });
-  writeFileSync(h.eventPath, JSON.stringify({ sender: user, comment: { user, pull_request_review_id: 7 }, pull_request: pr }));
-  const result = await h.execute('prepare', { GITHUB_EVENT_NAME: 'pull_request_review_comment' });
-  assert.equal(result.code, 0, result.output);
-  assert.doesNotMatch(result.outputs, /mode=analyze/);
-  assert.equal(h.state.value.iteration, 0);
-});
-
-test('old HEAD and impersonated bot events cannot start an iteration', async t => {
-  const h = await harness(t);
-  h.state.reviews = [{ ...review, commit_id: 'old' }];
-  assert.doesNotMatch((await h.execute('prepare')).outputs, /mode=analyze/);
-  h.state.reviews = [review];
-  writeFileSync(h.eventPath, JSON.stringify({ sender: { ...user, id: 999 }, review, pull_request: pr }));
-  assert.doesNotMatch((await h.execute('prepare')).outputs, /mode=analyze/);
-});
-
-test('workflow_run cannot initiate a new fixing iteration', async t => {
-  const h = await harness(t);
-  writeFileSync(h.eventPath, JSON.stringify({ workflow_run: { head_sha: 'head' } }));
-  const result = await h.execute('prepare', { GITHUB_EVENT_NAME: 'workflow_run' });
-  assert.equal(result.code, 0, result.output);
-  assert.doesNotMatch(result.outputs, /mode=analyze/);
-});
-
-test('successful push interrupted before state update is counted exactly once', async t => {
-  const h = await harness(t, { state: { ...initialState(), iteration: 2, state: 'PUBLISHING',
-    pendingPush: { sha: 'head', parent: 'old', review: { ...review, commit_id: 'old' }, iteration: 3 } } });
-  const result = await h.execute('prepare');
-  assert.equal(result.code, 0, result.output);
-  assert.equal(h.state.value.iteration, 3);
-  assert.equal(h.state.value.state, 'WAITING_FOR_REVIEW');
-  assert.equal(h.state.value.lastProcessedHeadSha, 'old');
-  assert.equal(h.state.value.pendingPush, null);
-  assert.equal((await h.execute('prepare')).code, 0);
-  assert.equal(h.state.value.iteration, 3);
-});
-
-test('interrupted unpublished reservation stops for recovery rather than duplicate pushing', async t => {
-  const h = await harness(t, { state: { ...initialState(), state: 'PUBLISHING',
-    pendingPush: { sha: 'unpublished', parent: 'head', review, iteration: 1 } } });
-  assert.equal((await h.execute('prepare')).code, 0);
-  assert.equal(h.state.value.state, 'NEEDS_HUMAN');
-  assert.equal(h.state.value.iteration, 0);
-});
-
-test('actionable fifth-iteration review stops before validation or fix', async t => {
-  const h = await harness(t, { state: { ...initialState(), iteration: 5 } });
-  assert.equal((await h.execute('prepare')).code, 0);
-  writeFileSync(join(h.planDir, 'analysis.json'), JSON.stringify({ findings: [
-    { id: 'review:7', status: 'actionable', reason: 'Concrete defect still present' },
-  ] }));
-  const result = await h.execute('analyze');
-  assert.equal(result.code, 0, result.output);
-  assert.equal(h.state.value.state, 'LOOP_LIMIT_REACHED');
-  assert.equal(h.state.value.iteration, 5);
-  assert.doesNotMatch(result.outputs, /fix=true/);
-  assert.doesNotMatch(result.outputs, /validate=true/);
-});
-
-test('clean review after fifth push may still validate and reach readiness', async t => {
-  const h = await harness(t, { state: { ...initialState(), iteration: 5 } });
-  assert.equal((await h.execute('prepare')).code, 0);
-  writeFileSync(join(h.planDir, 'analysis.json'), JSON.stringify({ findings: [
-    { id: 'review:7', status: 'informational', reason: 'No concrete findings' },
-  ] }));
-  const result = await h.execute('analyze');
-  assert.equal(result.code, 0, result.output);
-  assert.match(result.outputs, /validate=true/);
-  assert.doesNotMatch(result.outputs, /fix=true/);
-  assert.equal(h.state.value.iteration, 5);
-});
-
-test('missing classifications fail without advancing iteration', async t => {
-  const h = await harness(t);
-  assert.equal((await h.execute('prepare')).code, 0);
-  writeFileSync(join(h.planDir, 'analysis.json'), '{"findings":[]}');
-  assert.notEqual((await h.execute('analyze')).code, 0);
-  assert.equal(h.state.value.iteration, 0);
-});
-
-async function classify(h, status) {
-  const prepare = await h.execute('prepare');
-  assert.equal(prepare.code, 0, prepare.output);
-  writeFileSync(join(h.planDir, 'analysis.json'), JSON.stringify({ findings: [
-    { id: 'review:7', status, reason: status === 'actionable' ? 'Defect persists' : 'No defect present' },
-  ] }));
-  const analysis = await h.execute('analyze');
-  assert.equal(analysis.code, 0, analysis.output);
+function setup() {
+  const api = new FakeGitHub(); let now = '2026-10-08T00:00:00Z';
+  const loop = new AgentLoop(api, { runId: '55', now: () => now });
+  return { api, loop, advance: () => { now = '2026-10-08T00:08:00Z'; } };
 }
+const classify = (plan, status = 'informational') => plan.context.sources.map(source => ({ id: source.id, status, reason: 'Code evidence' }));
 
-test('clean review exits while CI is pending, then CI event certifies without reanalysis', async t => {
-  const h = await harness(t);
-  await classify(h, 'informational');
-  const pending = await h.execute('finish');
-  assert.equal(pending.code, 0, pending.output);
-  assert.equal(h.state.value.state, 'WAITING_FOR_CI');
-  assert.equal(h.state.calls.some(call => call.method === 'POST' && call.url.endsWith('/issues/1/labels')), false);
-  h.state.ciGreen = true;
-  writeFileSync(h.eventPath, JSON.stringify({ workflow_run: { head_sha: 'head' } }));
-  const ready = await h.execute('prepare', { GITHUB_EVENT_NAME: 'workflow_run' });
-  assert.equal(ready.code, 0, ready.output);
-  assert.match(ready.outputs, /mode=ready/);
-  const certified = await h.execute('finish');
-  assert.equal(certified.code, 0, certified.output);
-  assert.equal(h.state.value.state, 'READY_FOR_HUMAN');
-  assert.equal(h.state.value.iteration, 0);
-  assert.equal(h.state.calls.filter(call => call.method === 'POST' && call.url.endsWith('/issues/1/labels')).length, 1);
+test('completed latest review with finding enters FIXING; no implementation while Running', async () => {
+  const { api, loop } = setup(); api.addFinding();
+  const plan = await loop.plan(1);
+  const fixed = await loop.decide(plan, classify(plan, 'actionable'));
+  assert.equal(fixed.mode, 'fix'); assert.equal(api.record.value.state, 'FIXING');
+  api.phase = 'running'; const waiting = await loop.plan(1);
+  assert.equal(waiting.mode, 'skip'); assert.equal(waiting.state, 'WAITING_FOR_REVIEW');
+  assert.equal(api.posts.length, 0);
+});
+test('clean validation waits for pending CI; later check reconciliation certifies and posts once', async () => {
+  const { api, loop } = setup(); api.green = false;
+  const plan = await loop.plan(1), clean = await loop.decide(plan, classify(plan));
+  assert.equal(await loop.ready(clean, { validated: true }), 'WAITING_FOR_CI');
+  assert.equal(api.posts.length, 0);
+  api.green = true;
+  const resumed = await loop.plan(1);
+  assert.equal(resumed.mode, 'ready'); assert.equal(await loop.ready(resumed), 'READY_TO_MERGE');
+  assert.ok(api.pr.labels.some(label => label.name === 'agent-ready'));
+  assert.equal(api.posts.length, 1); assert.match(api.posts[0], /READY_TO_MERGE/);
+  await loop.ready(await loop.plan(1)); assert.equal(api.posts.length, 1);
+});
+test('new HEAD invalidates ready and resets review request counter', async () => {
+  const { api, loop } = setup(); const p = await loop.plan(1), clean = await loop.decide(p, classify(p));
+  await loop.ready(clean, { validated: true });
+  api.pr.head.sha = next;
+  const waiting = await loop.plan(1);
+  assert.equal(waiting.state, 'WAITING_FOR_REVIEW_START');
+  assert.ok(!api.pr.labels.some(label => label.name === 'agent-ready'));
+  assert.equal(api.record.value.lastValidationSha, null); assert.equal(api.record.value.reviewRequestAttempts, 0);
+});
+test('same review ID with edited finding reprocesses and removes stale ready', async () => {
+  const { api, loop } = setup(); const p = await loop.plan(1), clean = await loop.decide(p, classify(p));
+  await loop.ready(clean, { validated: true }); api.addFinding();
+  const changed = await loop.plan(1);
+  assert.equal(changed.mode, 'analyze'); assert.equal(changed.context.reviewId, p.context.reviewId);
+  assert.ok(!api.pr.labels.some(label => label.name === 'agent-ready'));
+});
+test('changed finding while fixing cannot reserve push or resolve a stale thread', async () => {
+  const { api, loop } = setup(); api.addFinding();
+  const p = await loop.plan(1), fix = await loop.decide(p, classify(p, 'actionable'));
+  api.comments[0].body = 'Edited finding'; api.threadsData[0].comments.nodes[0].body = 'Edited finding';
+  await assert.rejects(loop.reservePush(fix, next), /STALE_PLAN/);
+  await loop.resolveUnchanged(fix); assert.equal(api.threadsData[0].isResolved, false);
+  assert.equal(api.record.value.pendingPush, null);
+});
+test('one validated review/fix/push increments once and returns to review-start wait', async () => {
+  const { api, loop } = setup(); api.addFinding();
+  const p = await loop.plan(1), fix = await loop.decide(p, classify(p, 'actionable'));
+  await loop.enterValidation(fix); assert.equal(api.record.value.state, 'VALIDATING');
+  await loop.reservePush(fix, next); assert.equal(api.record.value.state, 'PUSHING');
+  api.pr.head.sha = next;
+  const result = await loop.published(fix, next);
+  assert.equal(result.iteration, 1); assert.equal(result.state, 'WAITING_FOR_REVIEW_START');
+  assert.equal(result.reviewRequestAttempts, 0); assert.equal(api.threadsData[0].isResolved, true);
+});
+test('interrupted successful push recovery counts once; unknown reservation blocks', async () => {
+  const { api, loop } = setup(); const p = await loop.plan(1), fix = await loop.decide(p, classify(p, 'actionable'));
+  await loop.reservePush(fix, next); api.pr.head.sha = next;
+  await loop.plan(1); assert.equal(api.record.value.iteration, 1);
+  await loop.plan(1); assert.equal(api.record.value.iteration, 1);
+  api.record.value.pendingPush = { sha: 'unknown' };
+  assert.equal((await loop.plan(1)).state, 'BLOCKED');
+});
+test('fallback grace, once-only accounting, Running guard, and new HEAD reset', async () => {
+  const { api, loop, advance } = setup(); api.phase = 'not-started';
+  await loop.plan(1); assert.equal(api.posts.length, 0); advance();
+  await loop.plan(1); assert.equal(api.posts.length, 1); assert.match(api.posts[0], /@codex review/);
+  await loop.plan(1); assert.equal(api.posts.length, 1);
+  api.phase = 'running'; await loop.plan(1); assert.equal(api.posts.length, 1);
+  api.pr.head.sha = next; await loop.plan(1); assert.equal(api.record.value.reviewRequestAttempts, 0);
+});
+test('automatic-only and manual policy never post review requests', async () => {
+  for (const mode of ['automatic-only', 'manual']) {
+    const { api, loop, advance } = setup(); loop.mode = mode; api.phase = 'not-started';
+    await loop.plan(1); advance(); const p = await loop.plan(1);
+    assert.equal(api.posts.length, 0);
+    assert.equal(p.state, mode === 'manual' ? 'BLOCKED' : 'WAITING_FOR_REVIEW_START');
+  }
+});
+test('fifth iteration can certify clean but cannot publish another actionable fix', async () => {
+  const { api, loop } = setup(); api.record.value = { ...initialState(), iteration: 5 };
+  const p = await loop.plan(1); const limit = await loop.decide(p, classify(p, 'actionable'));
+  assert.equal(limit.mode, 'skip'); assert.equal(api.record.value.state, 'LOOP_LIMIT_REACHED');
+  assert.equal(api.record.value.iteration, 5);
+});
+test('CI failure, merge conflict, and label removal invalidate READY_TO_MERGE', async () => {
+  for (const cause of ['ci', 'conflict', 'label']) {
+    const { api, loop } = setup(); const p = await loop.plan(1), clean = await loop.decide(p, classify(p));
+    await loop.ready(clean, { validated: true });
+    if (cause === 'ci') api.green = false;
+    if (cause === 'conflict') api.pr.mergeable = false;
+    if (cause === 'label') api.pr.labels = api.pr.labels.filter(label => label.name !== 'agent-loop');
+    const resumed = await loop.plan(1);
+    if (resumed.mode === 'ready') await loop.ready(resumed);
+    assert.ok(!api.pr.labels.some(label => label.name === 'agent-ready'));
+    assert.notEqual(api.record.value.state, 'READY_TO_MERGE');
+  }
+});
+test('fresh job boundaries and production scripts contain no polling or publication/merge operations', () => {
+  const yaml = readFileSync(new URL('../../.github/workflows/agent-loop-iteration.yml', import.meta.url), 'utf8');
+  assert.equal((yaml.match(/uses: openai\/codex-action/g) || []).length, 2);
+  assert.match(yaml, /  analyze:/); assert.match(yaml, /  fix:/); assert.match(yaml, /  validate:/); assert.match(yaml, /  publish:/);
+  for (const job of ['analyze', 'fix']) {
+    const section = yaml.split(`  ${job}:`)[1].split(/\n  [a-z]+:/)[0];
+    assert.equal(section.split('uses: openai/codex-action')[1].includes('\n      - '), false);
+  }
+  const dispatcher = readFileSync(new URL('../../.github/workflows/agent-loop.yml', import.meta.url), 'utf8');
+  assert.match(dispatcher, /check_run:/); assert.match(dispatcher, /status:/); assert.match(dispatcher, /schedule:/);
+  assert.doesNotMatch(yaml + dispatcher, /sleep |while true|gh pr merge|release create/);
+  assert.ok(hash(yaml));
 });
 
-test('fix publishes exactly one commit with expected HEAD lease and increments once', async t => {
-  const h = await harness(t);
-  await classify(h, 'actionable');
-  writeFileSync(join(h.planDir, 'fix.json'), JSON.stringify({ fixedFindingIds: ['review:7'], summary: 'Fixed defect' }));
-  const result = await h.execute('finish', { TEST_FIX: 'true', AGENT_LOOP_TOKEN: 'fixture-publisher' });
-  assert.equal(result.code, 0, result.output);
-  const calls = readFileSync(join(h.dir, 'git-log'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.equal(calls.filter(args => args.includes('commit')).length, 1);
-  const pushes = calls.filter(args => args.includes('push'));
-  assert.equal(pushes.length, 1);
-  assert.ok(pushes[0].includes('--force-with-lease=refs/heads/codex/fix:head'));
-  assert.equal(h.state.value.iteration, 1);
-  assert.equal(h.state.value.state, 'WAITING_FOR_REVIEW');
-  assert.deepEqual(h.state.value.processedReviewIds, [7]);
-  assert.equal(h.state.value.currentHeadSha, 'fixed-sha');
-  assert.equal(h.state.calls.some(call => call.url.includes('requested_reviewers')), false);
-});
-
-test('HEAD racing with analysis prevents any commit or push', async t => {
-  const h = await harness(t);
-  await classify(h, 'actionable');
-  h.state.pr.head.sha = 'human-push';
-  const result = await h.execute('finish', { TEST_FIX: 'true', AGENT_LOOP_TOKEN: 'fixture-publisher' });
-  assert.notEqual(result.code, 0);
-  assert.match(result.output, /HEAD\/eligibility changed/);
-  assert.equal(h.state.value.iteration, 0);
-});
-
-test('missing push token fails before reserving a publication', async t => {
-  const h = await harness(t);
-  await classify(h, 'actionable');
-  const result = await h.execute('finish', { TEST_FIX: 'true', AGENT_LOOP_TOKEN: '' });
-  assert.notEqual(result.code, 0);
-  assert.equal(h.state.value.pendingPush, null);
-  assert.equal(h.state.value.iteration, 0);
-});
-
-test('validation failure is persisted without marking review processed', async t => {
-  const h = await harness(t);
-  await classify(h, 'actionable');
-  const result = await h.execute('fail');
-  assert.equal(result.code, 0, result.output);
-  assert.equal(h.state.value.state, 'VALIDATION_FAILED');
-  assert.equal(h.state.value.iteration, 0);
-  assert.deepEqual(h.state.value.processedReviewIds, []);
-});
-
-test('removing eligibility invalidates both ready label and persisted ready state', async t => {
-  const h = await harness(t, { state: { ...initialState(), state: 'READY_FOR_HUMAN',
-    cleanReview: { headSha: 'head', fingerprint: 'old' } } });
-  h.state.pr.labels = [];
-  const result = await h.execute('prepare');
-  assert.equal(result.code, 0, result.output);
-  assert.equal(h.state.value.state, 'INACTIVE');
-  assert.equal(h.state.value.cleanReview, null);
-  assert.ok(h.state.calls.some(call => call.method === 'DELETE' && call.url.endsWith('/labels/agent-ready')));
-});
-
-test('edited finding invalidates readiness even on a CI-only continuation', async t => {
-  const h = await harness(t);
-  await classify(h, 'informational');
-  h.state.ciGreen = true;
-  assert.equal((await h.execute('finish')).code, 0);
-  assert.equal(h.state.value.state, 'READY_FOR_HUMAN');
-  h.state.reviews = [{ ...review, body: 'New actionable defect' }];
-  writeFileSync(h.eventPath, JSON.stringify({ workflow_run: { head_sha: 'head' } }));
-  const result = await h.execute('prepare', { GITHUB_EVENT_NAME: 'workflow_run' });
-  assert.equal(result.code, 0, result.output);
-  assert.equal(h.state.value.state, 'WAITING_FOR_REVIEW');
-  assert.equal(h.state.value.cleanReview, null);
-  assert.doesNotMatch(result.outputs, /mode=ready/);
+test('initial implementation exposes IMPLEMENTING/VALIDATING/PUSHING without counting a repair', async () => {
+  const { api, loop } = setup();
+  await loop.implementation(1, 'IMPLEMENTING'); assert.equal(api.record.value.state, 'IMPLEMENTING');
+  await loop.implementation(1, 'VALIDATING'); assert.equal(api.record.value.state, 'VALIDATING');
+  await loop.implementation(1, 'PUSHING'); assert.equal(api.record.value.state, 'PUSHING');
+  api.pr.head.sha = next;
+  const waiting = await loop.plan(1);
+  assert.equal(waiting.state, 'WAITING_FOR_REVIEW_START'); assert.equal(api.record.value.iteration, 0);
 });

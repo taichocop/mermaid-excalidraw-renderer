@@ -1,44 +1,37 @@
-name: Agent loop
+name: Agent loop events
 on:
-  # Repair is gated on verified event types and immutable bot user ID.
-  # The separate observer collects all candidate events without repairing.
+  issue_comment:
+    types: [created, edited]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, edited, dismissed]
   pull_request_review_comment:
-    types: [created]
+    types: [created, edited, deleted]
   pull_request_target:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, closed]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft, closed, edited]
   workflow_run:
     workflows: [Validate plugin]
     types: [completed]
+  check_run:
+    types: [created, completed, rerequested]
+  check_suite:
+    types: [completed]
+  status:
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       pr_number:
-        description: PR to resume after configuration or a failed run
-        required: true
+        description: PR to reconcile (empty checks eligible waiting/ready PRs)
         type: string
+        required: false
 permissions:
   contents: read
   pull-requests: read
-  actions: read
-  checks: read
-  statuses: read
-
-env:
-  CODEX_REVIEW_LOGIN: ${{ vars.CODEX_REVIEW_LOGIN }}
-  CODEX_REVIEW_USER_ID: ${{ vars.CODEX_REVIEW_USER_ID }}
-  CODEX_REVIEW_EVENTS: ${{ vars.CODEX_REVIEW_EVENTS }}
-  MAX_AGENT_ITERATIONS: ${{ vars.MAX_AGENT_ITERATIONS || '5' }}
-
+  actions: write
 jobs:
-  resolve:
-    if: >-
-      vars.CODEX_REVIEW_LOGIN != '' && vars.CODEX_REVIEW_USER_ID != '' &&
-      contains(vars.CODEX_REVIEW_EVENTS, 'pull_request_review')
+  dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
-    outputs:
-      prs: ${{ steps.resolve.outputs.prs }}
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,127 +41,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - id: resolve
-        run: node controller/scripts/agent-loop/run.mjs resolve
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  iteration:
-    needs: resolve
-    if: needs.resolve.outputs.prs != '[]'
-    strategy:
-      fail-fast: false
-      matrix:
-        pr: ${{ fromJSON(needs.resolve.outputs.prs) }}
-    # Summary, inline comments, synchronization, and CI completion share this lock.
-    concurrency:
-      group: agent-loop-pr-${{ matrix.pr }}
-      cancel-in-progress: false
-      queue: max
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: read
-      checks: read
-      statuses: read
-    env:
-      PR_NUMBER: ${{ matrix.pr }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-          path: controller
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Verify event, current HEAD, identity, state, and deduplication
-        id: prepare
-        run: node controller/scripts/agent-loop/run.mjs prepare
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - uses: actions/checkout@v4
-        if: steps.prepare.outputs.mode == 'analyze'
-        with:
-          ref: ${{ steps.prepare.outputs.head_sha }}
-          path: work
-          persist-credentials: false
-      - name: Install dependencies and browser before dropping sudo
-        if: steps.prepare.outputs.mode == 'analyze'
-        working-directory: work
+      - name: Resolve current PR and enqueue one iteration
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
-      - name: Analyze received findings with Codex CLI
-        if: steps.prepare.outputs.mode == 'analyze'
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
-        with:
-          codex-version: '0.154.0'
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          working-directory: ${{ github.workspace }}/work
-          prompt-file: ${{ steps.prepare.outputs.plan_dir }}/analyze.txt
-          output-file: ${{ steps.prepare.outputs.plan_dir }}/analysis.json
-          output-schema-file: ${{ github.workspace }}/controller/scripts/agent-loop/analysis.schema.json
-          sandbox: read-only
-          safety-strategy: drop-sudo
-          allow-bot-users: ${{ vars.CODEX_REVIEW_LOGIN }}
-      - name: Decide whether a single fix is needed
-        if: steps.prepare.outputs.mode == 'analyze'
-        id: analyze
-        run: node controller/scripts/agent-loop/run.mjs analyze
+          if test -f controller/scripts/agent-loop/service.mjs; then
+            node controller/scripts/agent-loop/run.mjs dispatch
+          else
+            echo 'Controller is awaiting human merge to the default branch.'
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: Fix findings with Codex CLI once
-        if: steps.analyze.outputs.fix == 'true'
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
-        with:
-          codex-version: '0.154.0'
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          working-directory: ${{ github.workspace }}/work
-          prompt-file: ${{ steps.prepare.outputs.plan_dir }}/fix.txt
-          output-file: ${{ steps.prepare.outputs.plan_dir }}/fix.json
-          output-schema-file: ${{ github.workspace }}/controller/scripts/agent-loop/fix.schema.json
-          sandbox: workspace-write
-          safety-strategy: drop-sudo
-          allow-bot-users: ${{ vars.CODEX_REVIEW_LOGIN }}
-      - name: Validate changes
-        if: steps.analyze.outputs.validate == 'true'
-        working-directory: work
-        env:
-          PLAYWRIGHT_CHANNEL: chromium
-        run: |
-          npm ci
-          npm run lint
-          npm run typecheck
-          npm run test
-          npm run build
-          npm run test:browser
-      - name: Check out HEAD for CI-only readiness continuation
-        if: steps.prepare.outputs.mode == 'ready'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.prepare.outputs.head_sha }}
-          path: work
-          persist-credentials: false
-      - name: Publish once or certify readiness, then exit
-        if: steps.analyze.outputs.validate == 'true' || steps.prepare.outputs.mode == 'ready'
-        run: node controller/scripts/agent-loop/run.mjs finish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # App/PAT token preserves automatic CI/review triggering after push.
-          AGENT_LOOP_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
-      - name: Persist failure for recovery
-        if: failure() && steps.prepare.outputs.mode != 'skip'
-        run: node controller/scripts/agent-loop/run.mjs fail
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - name: Preserve iteration evidence
-        if: always() && steps.prepare.outputs.plan_dir != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-loop-pr-${{ matrix.pr }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.prepare.outputs.plan_dir }}
-          retention-days: 30
+          CODEX_REVIEW_LOGIN: ${{ vars.CODEX_REVIEW_LOGIN }}
+          CODEX_REVIEW_USER_ID: ${{ vars.CODEX_REVIEW_USER_ID }}
+          CODEX_REVIEW_APP_ID: ${{ vars.CODEX_REVIEW_APP_ID }}

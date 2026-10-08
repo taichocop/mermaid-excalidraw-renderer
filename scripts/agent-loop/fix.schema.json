@@ -1,7 +1,8 @@
 {
-  "type": "object", "additionalProperties": false, "required": ["fixedFindingIds", "summary"],
+  "type": "object", "additionalProperties": false,
+  "required": ["fixedFindingIds", "summary", "patch"],
   "properties": {
     "fixedFindingIds": { "type": "array", "items": { "type": "string" } },
-    "summary": { "type": "string" }
+    "summary": { "type": "string" }, "patch": { "type": "string" }
   }
 }
