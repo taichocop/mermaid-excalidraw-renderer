@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, validateSettings } from "../../src/settings/settings";
 
 describe("persisted settings validation", () => {
+  it("enables standard Mermaid for new and legacy installs", () => {
+    expect(DEFAULT_SETTINGS.renderStandardMermaid).toBe(true);
+    expect(validateSettings(null).renderStandardMermaid).toBe(true);
+    expect(validateSettings({ fontSize: 24 }).renderStandardMermaid).toBe(true);
+  });
+  it("preserves explicit on/off through a persisted JSON round trip", () => {
+    for (const renderStandardMermaid of [false, true, false]) {
+      const settings = validateSettings({ renderStandardMermaid, fontSize: 24 });
+      expect(validateSettings(JSON.parse(JSON.stringify(settings)))).toEqual(settings);
+      expect(settings.renderStandardMermaid).toBe(renderStandardMermaid);
+    }
+  });
+  it.each([undefined, null, "false", "true", 0, 1, [], {}])("defaults invalid standard Mermaid setting %j to on", (renderStandardMermaid) => {
+    expect(validateSettings({ renderStandardMermaid }).renderStandardMermaid).toBe(true);
+  });
   it.each([null, undefined, [], "corrupted", 7])("defaults invalid data %j", (value) => {
     expect(validateSettings(value)).toEqual(DEFAULT_SETTINGS);
   });

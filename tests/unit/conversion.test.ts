@@ -53,4 +53,45 @@ describe("conversion wrapper", () => {
     expect(errorMessage({ untrusted: "<script>" })).toBe("Unknown diagram rendering error.");
     log.mockRestore();
   });
+  it.each([
+    'A@{ img: "https://example.invalid/a.png" }',
+    'A@{ "img": "/relative.png" }',
+    String.raw`A@{ "\u0069mg": "relative.png" }`,
+    'A@{ shape: rect, label: "Even benign metadata is refused" }',
+    'sequenceDiagram\nparticipant A\nproperties A: {"icon": "/relative-image.png"}\nA->>A: Safe',
+    'sequenceDiagram\nparticipant A\nproperties A: {"icon": "relative-image.png"}\nA->>A: Safe',
+    'sequenceDiagram;participant A;PrOpErTiEs A: {"icon": "relative-image.png"}',
+    'sequenceDiagram\nparticipant A\ndetails A: sequence-resource-metadata\nA->>A: Safe',
+    'sequenceDiagram\nparticipant A\nproperties A: {"class": "Even benign metadata is refused"}',
+    '<img src=relative.png>',
+    '<svg><feImage href="relative.png" /></svg>',
+    '<video poster="relative.png">',
+    '<meta http-equiv="refresh" content="0;URL=relative">',
+    '![image](relative.png)',
+    'fill:url(relative.png)',
+    'fill:image-set("relative.png" 1x)',
+    'fill:image("relative.png")',
+    '@import "relative.css"',
+    String.raw`fill:u\72l(relative.png)`,
+    'fill:u/**/rl(relative.png)',
+    '#60;img s#114;c=relative.png#62;',
+    '&lt;img s&#114;c=relative.png&gt;',
+    'ﬂ°lt¶ßimg sﬂ°°114¶ßc=relative.pngﬂ°gt¶ß',
+    '//example.invalid/a.png',
+    'https:example.invalid/a.png',
+    'data:image/svg+xml;base64,PHN2Zy8+',
+    'file:relative.png',
+    'blob:some-image',
+  ])("rejects resource-capable source before calling upstream: %s", async (source) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const parse = vi.fn().mockResolvedValue({ elements: [] });
+    const converter = new MermaidConverter(parse);
+    expect(await converter.convert(source, DEFAULT_SETTINGS, new AbortController().signal))
+      .toMatchObject({ status: "error", message: expect.stringContaining("Resource-capable Mermaid syntax") });
+    expect(parse).not.toHaveBeenCalled();
+    // Refusal must not poison later diagrams in the same conversion queue.
+    expect((await converter.convert("flowchart LR\nA[Safe] --> B[Local]", DEFAULT_SETTINGS, new AbortController().signal)).status).toBe("success");
+    expect(parse).toHaveBeenCalledTimes(1);
+    log.mockRestore();
+  });
 });

@@ -2,6 +2,7 @@ import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
 import { samples } from "./samples";
+import { validateSettings } from "../../src/settings/settings";
 
 interface TestPlugin extends mock.Plugin {
   settings: PluginSettings;
@@ -13,28 +14,91 @@ type PluginClass = new () => TestPlugin;
 let plugin: TestPlugin;
 const children = new Set<mock.MarkdownRenderChild>();
 
+type Block = { source: string; language: string };
+const blocks: Block[] = [];
+let pluginClass: PluginClass;
+let competitor: mock.Plugin | null = null;
+let readingView: mock.MarkdownView;
+let previewInvalidated = false;
+function clearRendered() {
+  for (const child of [...children]) child.unload();
+  children.clear();
+  document.querySelector("main")?.replaceChildren();
+}
+function renderBlock({ source, language }: Block) {
+  const block = document.createElement("section");
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.className = `language-${language}`;
+  code.textContent = source + "\n";
+  pre.append(code);
+  block.append(pre);
+  document.querySelector("main")?.appendChild(block);
+  mock.MarkdownPreviewRenderer.process(block, { addChild(child) {
+    children.add(child);
+    child.register(() => children.delete(child));
+    child.load();
+  } });
+}
 const harness = {
-  async boot(Plugin: PluginClass) { plugin = new Plugin(); await plugin.onload(); },
-  mount(source: string) {
-    const block = document.createElement("section");
-    document.querySelector("main")?.appendChild(block);
-    const processor = plugin.processors.get("mermaid-excalidraw");
-    if (!processor) throw new Error("Processor not registered");
-    processor(source, block, { addChild(child) { children.add(child); child.load(); } });
+  async boot(Plugin: PluginClass) {
+    pluginClass = Plugin;
+    plugin = new Plugin();
+    readingView = new mock.MarkdownView(() => {
+      if (readingView.mode === "preview") harness.rerender();
+      else {
+        // A full refresh invalidates a hidden preview, even while editing.
+        // Rebuild when the user returns to Reading view.
+        clearRendered();
+        previewInvalidated = true;
+      }
+    });
+    plugin.app.workspace.views = [readingView];
+    await plugin.onload();
   },
-  mountSamples(names: (keyof typeof samples)[]) { names.forEach((name) => harness.mount(samples[name])); },
-  clear() {
-    for (const child of children) child.unload();
-    children.clear();
-    document.querySelector("main")?.replaceChildren();
+  mount(source: string, language = "mermaid-excalidraw") {
+    const block = { source, language };
+    blocks.push(block);
+    renderBlock(block);
   },
-  disable() { plugin.onunload(); },
+  mountSamples(names: (keyof typeof samples)[], language = "mermaid-excalidraw") {
+    names.forEach((name) => harness.mount(samples[name], language));
+  },
+  rerender() { previewInvalidated = false; clearRendered(); blocks.forEach(renderBlock); },
+  clear() { blocks.length = 0; clearRendered(); },
+  disable() { plugin.unload(); },
+  async enable(saved: unknown = plugin.saved) {
+    plugin = new pluginClass();
+    plugin.saved = saved;
+    plugin.app.workspace.views = [readingView];
+    await plugin.onload();
+  },
+  hostState() {
+    return { editorLanguages: [...mock.MarkdownPreviewRenderer.codeBlockProcessors.keys()],
+      postProcessors: mock.MarkdownPreviewRenderer.postProcessors.map(({ order }) => order),
+      children: children.size, rerenders: readingView.rerenders, previewInvalidated, blocks: [...blocks] };
+  },
+  setViewMode(mode: "preview" | "source") {
+    readingView.mode = mode;
+    const main = document.querySelector("main");
+    if (main) main.hidden = mode === "source";
+    if (mode === "preview" && previewInvalidated) harness.rerender();
+  },
+  addCompetitor(order = -200) {
+    competitor = new mock.Plugin();
+    competitor.registerMarkdownCodeBlockProcessor("mermaid", (source, element) => {
+      element.className = "competitor-mermaid";
+      element.textContent = `Competitor: ${source}`;
+    }, order);
+    harness.rerender();
+  },
+  removeCompetitor() { competitor?.unload(); competitor = null; harness.rerender(); },
   theme(dark: boolean) {
     document.body.className = dark ? "theme-dark" : "theme-light";
     for (const callback of plugin.events) callback();
   },
   updateSettings(settings: Partial<PluginSettings>) { return plugin.updateSettings({ ...plugin.settings, ...settings }); },
-  savedSettings() { return plugin.saved; },
+  savedSettings() { return plugin.saved === null ? null : validateSettings(plugin.saved); },
   registeredLanguages() { return [...plugin.processors.keys()]; },
   openSettings() {
     if (!plugin.settingTab) throw new Error("Settings tab not registered");

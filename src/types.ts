@@ -1,4 +1,5 @@
 export interface PluginSettings {
+  renderStandardMermaid: boolean;
   fontSize: number;
   /** Legacy setting, used to migrate installations without canvasHeight. */
   maxHeight: number;
