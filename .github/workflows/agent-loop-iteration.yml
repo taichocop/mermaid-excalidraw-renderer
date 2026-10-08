@@ -42,20 +42,22 @@ jobs:
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
       head_sha: ${{ steps.plan.outputs.head_sha }}
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - id: plan
         run: node controller/scripts/agent-loop/run.mjs plan
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@v4
+      - id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: loop-plan
           path: loop/
@@ -67,19 +69,20 @@ jobs:
     outputs:
       result: ${{ steps.codex.outputs.final-message }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.plan.outputs.head_sha }}
           persist-credentials: false
           path: work
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-plan
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       # Last step: only action output crosses to a fresh runner.
       - id: codex
@@ -104,25 +107,28 @@ jobs:
       issues: write
     outputs:
       mode: ${{ steps.decide.outputs.mode }}
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-plan
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       - id: decide
         run: node controller/scripts/agent-loop/run.mjs decide
         env:
           GH_TOKEN: ${{ github.token }}
           ANALYSIS_RESULT: ${{ needs.analyze.outputs.result }}
-      - uses: actions/upload-artifact@v4
+      - id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: loop-decided
           path: loop/
@@ -134,22 +140,23 @@ jobs:
     outputs:
       result: ${{ steps.codex.outputs.final-message }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.plan.outputs.head_sha }}
           persist-credentials: false
           path: work
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-decided
+          artifact-ids: ${{ needs.decide.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       - name: Install dependencies without API or push credentials
         working-directory: work
@@ -166,6 +173,8 @@ jobs:
           safety-strategy: drop-sudo
           allow-bots: true
   candidate:
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     needs: [decide, fix]
     if: >-
       always() && needs.decide.result == 'success' &&
@@ -177,48 +186,53 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-decided
+          artifact-ids: ${{ needs.decide.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       - name: Package patch and enter VALIDATING
         run: node controller/scripts/agent-loop/run.mjs candidate
         env:
           GH_TOKEN: ${{ github.token }}
           FIX_RESULT: ${{ needs.fix.outputs.result }}
-      - uses: actions/upload-artifact@v4
+      - id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: loop-candidate
           path: loop/candidate.json
   validate:
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     needs: [plan, candidate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.plan.outputs.head_sha }}
           persist-credentials: false
           path: work
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-candidate
+          artifact-ids: ${{ needs.candidate.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       - run: node controller/scripts/agent-loop/run.mjs materialize
       - name: Validate candidate on a fresh runner
@@ -231,16 +245,18 @@ jobs:
           npm run lint
           npm run typecheck
           npm run test
+          npm run test:release
           npm run build
           npm run test:browser
       - name: Attest exact candidate tree
         run: node controller/scripts/agent-loop/run.mjs attest
-      - uses: actions/upload-artifact@v4
+      - id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: loop-validated
           path: loop/validated.json
   publish:
-    needs: [plan, validate]
+    needs: [plan, candidate, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -251,22 +267,28 @@ jobs:
       checks: read
       statuses: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.plan.outputs.head_sha }}
           persist-credentials: false
           path: work
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-validated
+          artifact-ids: ${{ needs.validate.outputs.artifact_id }}
+          merge-multiple: true
+          path: loop/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       # No package scripts or PR code run on this credential-bearing runner.
       - run: node controller/scripts/agent-loop/run.mjs publish
@@ -286,17 +308,18 @@ jobs:
       checks: read
       statuses: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: loop-plan
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          merge-multiple: true
           path: loop/
       - run: node controller/scripts/agent-loop/run.mjs certify
         env:
@@ -311,12 +334,12 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: controller
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - run: node controller/scripts/agent-loop/run.mjs failed

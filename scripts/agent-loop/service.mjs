@@ -160,7 +160,7 @@ export class AgentLoop {
       context = await this.context(pr);
       // Only our validated resolutions may have changed the snapshot.
       const previous = new Map(plan.context.sources.map(source => [source.id, source]));
-      if (context.sources.some(source => hash(source) !== hash(previous.get(source.id)))) throw new Error('STALE_PLAN: new or edited finding');
+      if (context.sources.some(source => !previous.has(source.id) || hash(source) !== hash(previous.get(source.id)))) throw new Error('STALE_PLAN: new or edited finding');
       state = { ...processed(state, context), analysis: plan.findings, lastValidationSha: pr.head.sha,
         state: 'WAITING_FOR_CI', lease: null };
       await this.save(record, state, pr);

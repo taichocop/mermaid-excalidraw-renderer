@@ -73,7 +73,7 @@ fresh publishing runner (PR code/package scriptsを実行しない)
 
 analysisとfixのdrop-sudo Actionを同じrunnerで繰り返さない。Action後にテスト・commit・pushしない。workspace、background process、Git設定を次runnerへコピーせず、構造化結果とpatchだけを渡す。
 
-validationは指定HEADへpatchを適用し、lint/typecheck/tests/build/browserを実行する。変更が検証中に増えていないこととexact treeを確認する。publisherはfresh checkoutへ検証済みpatchを適用し、同じtree SHAを確認する。PRコードを実行しないpublisherだけがpush tokenを受け取る。Git hooks/fsmonitor/user configを無効化し、親HEADを確認し、expected remote SHAのlease付きで1commitをpushする。
+validationは指定HEADへpatchを適用し、lint/typecheck/tests/build/browserを実行する。変更が検証中に増えていないこととexact treeを確認する。publisherは名前ではなくimmutable artifact IDで元candidateとvalidation artifactを別々に再取得し、planとdigestを照合する。fresh checkoutへ元candidate patchを適用し、検証済みcanonical diffとtree SHAの両方を確認する。validation runnerが元candidateの内容を差し替えることはできない。PRコードを実行しないpublisherだけがpush tokenを受け取る。Git hooks/fsmonitor/user configを無効化し、親HEADを確認し、expected remote SHAのlease付きで1commitをpushする。
 
 workflow/controller/agent instructions/git設定等のprotected path変更は自動publishを拒否する。PR #1の制御コード変更は、このInteractiveの明示的な実装依頼として人間がレビュー可能なPRへ反映する。公開repoのfork PRは自動修正対象外。同repositoryのopen・non-draft・`agent-loop`付きPRのみ対象。
 
