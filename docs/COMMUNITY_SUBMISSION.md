@@ -32,6 +32,8 @@ Public visibility and an empty release list were confirmed using the public GitH
 - [ ] Release manifest, default-branch manifest, package/lock version and versions.json agree. No source maps, fixtures or credentials in assets.
 - [ ] Maintainer accepts ongoing support responsibilities and all policy disclosures.
 
+Native results and the exact remaining checks are recorded in [NATIVE_ACCEPTANCE.md](NATIVE_ACCEPTANCE.md). Dark rendering/settings-save checks have passed on 1.14.4; the complete native gate above is still open.
+
 ## Current submission route
 
 1. Sign in at [community.obsidian.md](https://community.obsidian.md) with your Obsidian account.

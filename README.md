@@ -108,6 +108,7 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 - Reading view is the supported view. Live Preview is not part of the release acceptance criteria.
 - Mobile has not been tested. The browser-compatible code does not establish mobile compatibility.
 - Class/ER/State fall back to SVG with Mermaid 11.17.2 and converter 2.2.2. This secure dependency combination is preferred over downgrading Mermaid for conversion fidelity.
+- SVG fallback preserves upstream layout; Gantt date-axis labels can overlap in narrow views.
 - Appearance is normalized to monochrome; Mermaid's original colors are not preserved.
 - Very large diagrams may need panning because Excalidraw's minimum zoom is 10%. Expensive input can still block rendering; there is no hard timeout or worker isolation.
 - The bundle includes diagram renderers and fonts and is relatively large.
