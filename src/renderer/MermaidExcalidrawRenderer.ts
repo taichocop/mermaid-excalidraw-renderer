@@ -15,7 +15,7 @@ export class MermaidExcalidrawRenderer {
 
   render(source: string, element: HTMLElement, context: MarkdownPostProcessorContext, standard = false): void {
     if (this.disposed) return;
-    const container = element.ownerDocument.createElement("div");
+    const container = element.createDiv();
     container.className = "mermaid-excalidraw-container";
     container.setAttribute("aria-label", "Mermaid diagram in Excalidraw view mode");
     element.replaceChildren(container);

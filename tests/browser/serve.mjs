@@ -1,6 +1,9 @@
+import { browserPort } from "./port.mjs";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import * as esbuild from "esbuild";
+
+const port = browserPort();
 
 await esbuild.build({ entryPoints: ["tests/browser/harness.ts"], bundle: true, format: "iife",
   outfile: "tests/browser/build/harness.js", platform: "browser" });
@@ -17,4 +20,4 @@ createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": route[1] });
     res.end(await readFile(route[0]));
   } catch { res.writeHead(500).end(); }
-}).listen(4173, "127.0.0.1", () => console.log("Browser harness: http://127.0.0.1:4173"));
+}).listen(port, "127.0.0.1", () => console.log(`Browser harness: http://127.0.0.1:${port}`));

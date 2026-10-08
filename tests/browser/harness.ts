@@ -1,3 +1,4 @@
+import { stripInlineColors } from "../../src/appearance/svgStyles";
 import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
@@ -41,6 +42,7 @@ function renderBlock({ source, language }: Block) {
   } });
 }
 const harness = {
+  stripInlineColors,
   async boot(Plugin: PluginClass) {
     pluginClass = Plugin;
     plugin = new Plugin();

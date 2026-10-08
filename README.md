@@ -55,7 +55,7 @@ flowchart LR
 
 Use `mermaid-excalidraw` instead of `mermaid` for a block that should always use this plugin, even when the standard-block setting is OFF.
 
-Edit the source text to change the diagram. The view supports panning and zooming; editing drawings, saving Excalidraw files and exporting images are not included.
+Edit the source text to change the diagram. The view supports mouse/pen panning, wheel navigation and zoom controls; the embedded canvas UI blocks editing drawings, clipboard copy/paste, import/save controls, image export and editor dialogs in 0.1.2. Touch interaction is unsupported. Copy the Mermaid source from your note editor when needed.
 
 ### Sequence diagram
 
@@ -128,7 +128,7 @@ Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In v
 
 ## Privacy and security
 
-No payment, account, ads or telemetry are required or included. The plugin does not scan your vault, modify notes, access files outside the vault, or install/update itself or its dependencies. Only plugin settings are saved through Obsidian's public API.
+No payment, account, ads or telemetry are required or included. Plugin-owned runtime code does not scan your vault, modify notes, request Node filesystem access, or install/update itself or its dependencies. Plugin settings are saved through Obsidian's public API. Bundled upstream code retains conditional browser file-launch and dialog/storage helpers; the exposed viewer controls are restricted, but this is not an API sandbox. See [SCORECARD_TRIAGE.md](SCORECARD_TRIAGE.md) for the traced conditions and tested interactions.
 
 Rendering uses bundled JavaScript and fonts and works offline. Before calling the converter, both standard and dedicated blocks reject resource-capable source with an inline error: image/node metadata (`@{…}`), Sequence `properties`/`details` (including actor icons), resource HTML attributes/tags, Markdown images, CSS image/import syntax and URLs. Backslash escapes, HTML/Mermaid entities and CSS comments are also refused because they can conceal those constructs. This conservative policy can reject harmless labels, comments, escaped text and non-image metadata, including any occurrence of the words `properties` or `details`; simplify the source to use this renderer.
 
@@ -146,7 +146,8 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 - Appearance is normalized to monochrome; Mermaid's original colors are not preserved.
 - Very large diagrams may need panning because Excalidraw's minimum zoom is 10%. Expensive input can still block rendering; there is no hard timeout or worker isolation.
 - Resource-capable source is not supported, including benign extended node metadata, `properties`/`details` keywords, URL text, backslash escapes and entity syntax. Refusal happens before conversion and does not affect other diagrams.
-- The bundle includes diagram renderers and fonts and is relatively large.
+- **Obsidian Sync Standard has a [5 MB maximum file size](https://obsidian.md/help/sync/plans).** The bundled `main.js` is about 26 MB because it includes offline fonts and diagram renderers, so it exceeds that limit. Install the plugin separately on each desktop through the Community Directory or the three runtime release files; do not rely on Standard to transfer this bundle. This limitation does not prevent local installation.
+- Bundled upstream font/image helpers retain inline WASM, generated function wrappers and conditional browser capabilities. These scanner flags do not by themselves prove vault/file/network access. See the evidence and unresolved checks in [SCORECARD_TRIAGE.md](SCORECARD_TRIAGE.md).
 
 If nothing appears, check the block language, plugin enablement and Reading view. For an inline error, simplify the Mermaid source and check its syntax locally. For an issue report, include plugin/Obsidian versions, OS, theme and a minimal example with private text removed. [Report a bug](https://github.com/taichocop/mermaid-excalidraw-renderer/issues).
 
@@ -166,7 +167,7 @@ npm run build
 npm run test:browser
 ```
 
-The output is `dist/mermaid-excalidraw-renderer/`. Local browser tests use Google Chrome; for Chromium run `npx playwright install chromium` followed by `PLAYWRIGHT_CHANNEL=chromium npm run test:browser`. Browser tests exercise the actual production bundle with a mocked Obsidian host. Native-host and mobile testing are separate checks.
+The output is `dist/mermaid-excalidraw-renderer/`. Local browser tests use Google Chrome; for Chromium run `npx playwright install chromium` followed by `PLAYWRIGHT_CHANNEL=chromium npm run test:browser`. Set `MERMAID_BROWSER_PORT=4176` for an isolated browser-test port (default: 4173); the value must be an integer from 1 to 65535. The harness server and Playwright use the same value. Browser tests exercise the actual production bundle with a mocked Obsidian host. Native-host and mobile testing are separate checks.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [release readiness](RELEASE_READINESS.md), [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md).
 

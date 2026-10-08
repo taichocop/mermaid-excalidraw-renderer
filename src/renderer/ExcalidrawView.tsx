@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import {
   CaptureUpdateAction,
   Excalidraw,
@@ -12,6 +12,7 @@ import { applyAppearance } from "../appearance/applyAppearance";
 import { normalizeSvgFiles } from "../appearance/normalizeSvgFiles";
 import type { ResolvedTheme } from "../appearance/resolveTheme";
 import { errorMessage, type DiagramData } from "./conversion";
+import { installViewOnlyBoundary } from "./viewOnlyBoundary";
 import { canvasFitOptions } from "./layout";
 
 interface ViewProps {
@@ -46,6 +47,7 @@ const canvasActions = {
 } as const;
 
 export function ExcalidrawView({ data, appearance, settings, container }: ViewProps) {
+  useLayoutEffect(() => installViewOnlyBoundary(container), [container]);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const converted = useRef<{ data: DiagramData; elements: ExcalidrawElement[] } | null>(null);
@@ -148,6 +150,7 @@ export function ExcalidrawView({ data, appearance, settings, container }: ViewPr
     autoFocus={false}
     aiEnabled={false}
     validateEmbeddable={false}
+    onPaste={() => false}
     onLinkOpen={(_element, event) => event.preventDefault()}
     initialData={{ appState: { viewBackgroundColor: appearance.background } }}
     UIOptions={{ canvasActions, tools: { image: false } }}

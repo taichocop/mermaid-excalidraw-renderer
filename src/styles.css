@@ -16,7 +16,7 @@
 /* Elements/files already use final visible colors. Disable the default dark
    canvas inversion, which would turn white strokes black a second time. */
 .mermaid-excalidraw-container .excalidraw.theme--dark canvas {
-  filter: none !important;
+  filter: none;
 }
 .mermaid-excalidraw-loading {
   padding: 20px;
@@ -34,4 +34,9 @@
   font-size: 0.85em;
   color: var(--text-normal, #333);
   background: transparent;
+}
+/* The embedded viewer exposes navigation, not the editor's help/dialog UI.
+   Runtime capture guards enforce this independently of presentation. */
+.mermaid-excalidraw-container .excalidraw .help-icon {
+  display: none;
 }
