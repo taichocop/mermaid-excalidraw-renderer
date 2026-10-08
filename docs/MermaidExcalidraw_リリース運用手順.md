@@ -41,14 +41,22 @@ buildはmetadata整合、型、配布物、external import（obsidianのみ）�
 
 ## 5. GitHub Release
 
-レビュー済み変更をdefault branch mainへmergeする。そのcommitへの正確なversion tagをpushすると release.yml が検証し、テスト済み成果物からdraft releaseを作る。検証jobはread-only、draft作成jobのみcontents write。mainへのmergeとpublic publishはレビュー後の最終工程。
+レビュー済み変更をdefault branch mainへmergeする。正確なversion tagをpushすると release.yml が最初に完全な履歴（fetch-depth: 0）と最新のorigin/mainを取得し、tagがworkflowのcommitを指し、そのcommitがmain historyに含まれることを検証する。mainのHEADそのものに限定せず、main上の過去commitも許容する。未mergeのbranch上のtag、shallow履歴、不明なrefはfailする。このrepositoryのdefault branchはmainと確認済みであり、branch名を変更する場合はworkflowとsource validatorを合わせて更新する。
+
+その後の全検証を通過した同一成果物からdraft releaseを作る。検証jobはread-only、draft作成jobのみcontents write。mainへのmergeとpublic publishはレビュー後の最終工程。
 
 ```sh
 git tag 0.1.0 <reviewed-main-commit>
 git push origin 0.1.0
 ```
 
+Draftの更新は scripts/sync-draft-release.mjs が行う。expected asset名はbuild validatorと共有し、workflow内には複製しない。local directoryの完全一致・SHA256SUMSの全entry・source manifestとの一致を検証し、GitHub APIの全pageから対象tagのReleaseとassetsを取得する。obsolete assetを削除し、同名でhash/size/stateが異なるものを置換する。既に一致しているassetは保持する。更新後に全pageを再取得し、名前集合と全ファイルのSHA-256・size・uploaded stateの完全一致を検証する。asset不足、余剰、hash不一致、API/Upload failureは必ずjobをfailさせ、読取failureを「Releaseなし」と解釈して新規作成しない。
+
+対象tagのReleaseはdraftのみ操作する。各delete/upload/edit直前にも同じRelease ID/tagのdraft状態を再確認し、publishedなら新versionを要求して停止する。Publishedへのclobber/delete/editは行わない。GitHub APIは状態確認と更新をatomicにする仕組みを提供しないため、手動publishは必ずworkflow完了後に行い、実行中に同じDraftを操作しない。
+
 CI結果、tagのcommit、添付ファイルのSHA-256、README開示、Release notesを確認してdraftをpublishする。published releaseへ同名assetを差し替えない。新versionで修正する。
+
+Release回帰テストは実際の一時Git repositoryとoffline GitHub API fixtureを使用する。既存main ancestor/HEAD、annotated tag、unmerged branch、shallow history、Draftのobsolete/stale asset、Published保護、API/Upload/hash/集合不一致のfail-closedを検証する。APIのpaginationとdigestは [GitHub公式Release assets仕様](https://docs.github.com/en/rest/releases/assets) に従う。
 
 ## 6. 申請
 

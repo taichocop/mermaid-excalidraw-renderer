@@ -3,6 +3,29 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
+// One asset contract for the build validator and GitHub draft synchronization.
+export const RELEASE_ASSET_NAMES = Object.freeze([
+  'LICENSE', 'SHA256SUMS.txt', 'THIRD_PARTY_NOTICES.txt', 'main.js', 'manifest.json', 'styles.css',
+]);
+
+export async function inspectReleaseAssets(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  assert.deepEqual(entries.map((entry) => entry.name).sort(), [...RELEASE_ASSET_NAMES],
+    'Release assets must exactly match the validated asset contract');
+  assert.ok(entries.every((entry) => entry.isFile()), 'Release assets must be regular files');
+  const assets = await Promise.all(RELEASE_ASSET_NAMES.map(async (name) => {
+    const path = `${dir}/${name}`;
+    const bytes = await readFile(path);
+    assert.ok(bytes.length > 0, `${name} must not be empty`);
+    return { name, path, size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` };
+  }));
+  const expectedSums = assets.filter((asset) => asset.name !== 'SHA256SUMS.txt')
+    .map((asset) => `${asset.digest.slice(7)}  ${asset.name}`).join('\n') + '\n';
+  assert.equal(await readFile(`${dir}/SHA256SUMS.txt`, 'utf8'), expectedSums,
+    'Asset hash mismatch or invalid SHA256SUMS entries');
+  return assets;
+}
+
 export function validateMetadata(manifest, pkg, lock, versions, tag) {
   const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   for (const key of ['id', 'name', 'version', 'minAppVersion', 'description', 'author']) {
@@ -40,7 +63,7 @@ export async function validateRelease({ root = '.', metadataOnly = false, tag = 
   validateMetadata(manifest, pkg, lock, versions, tag);
   if (metadataOnly) return;
   const dir = `${root}/dist/${manifest.id}`;
-  const expected = ['LICENSE', 'THIRD_PARTY_NOTICES.txt', 'main.js', 'manifest.json', 'styles.css'];
+  const expected = RELEASE_ASSET_NAMES.filter((name) => name !== 'SHA256SUMS.txt');
   assert.deepEqual((await readdir(dir)).filter((f) => f !== 'SHA256SUMS.txt').sort(), expected.sort(),
     'Release directory must contain only reviewed assets');
   assert.deepEqual(JSON.parse(await readFile(`${dir}/manifest.json`, 'utf8')), manifest, 'Built manifest is stale');
@@ -61,6 +84,7 @@ export async function validateRelease({ root = '.', metadataOnly = false, tag = 
     sums.push(`${createHash('sha256').update(bytes).digest('hex')}  ${name}`);
   }
   await writeFile(`${dir}/SHA256SUMS.txt`, `${sums.join('\n')}\n`);
+  await inspectReleaseAssets(dir);
   console.log(`Validated ${manifest.id} ${manifest.version}; runtime imports: obsidian only.`);
 }
 
