@@ -113,7 +113,8 @@ test('pending, failed, missing required checks block readiness and later complet
 });
 test('fifth fix is the last; final review can still certify clean', () => {
   assert.equal(lifecycleDecision({ ...onHead(initialState(), sha), iteration: 5 }, completed), 'analyze-only');
-  assert.equal(lifecycleDecision({ ...onHead(initialState(), sha), state: 'LOOP_LIMIT_REACHED' }, completed), 'limit');
+  assert.equal(lifecycleDecision(processed({ ...onHead(initialState(), sha), iteration: 5, state: 'LOOP_LIMIT_REACHED' }, completed), completed), 'limit');
+  assert.equal(lifecycleDecision({ ...onHead(initialState(), sha), iteration: 5, state: 'LOOP_LIMIT_REACHED' }, completed), 'analyze-only');
 });
 
 test('a visible current Codex comment without verified parent metadata cannot become clean', () => {

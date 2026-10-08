@@ -223,3 +223,32 @@ test('interactive handoff rejects stale, dirty, or unvalidated checkout and enfo
   assert.equal((await h.decide({ findings: classify(h.read('plan.json'), 'actionable') })).mode, 'skip');
   assert.equal(api.record.value.state, 'LOOP_LIMIT_REACHED');
 });
+test('protected publication failure blocks repeated same-context repairs and a new HEAD can resume', async () => {
+  const { api, loop } = setup(); api.addFinding();
+  const p = await loop.plan(1), fix = await loop.decide(p, classify(p, 'actionable'));
+  await loop.fail(1, 'protected-path violation; manual correction required');
+  assert.equal(api.record.value.state, 'BLOCKED');
+  assert.equal((await loop.plan(1)).mode, 'skip'); assert.equal(api.record.value.iteration, 0);
+  api.pr.head.sha = next; api.summarySha = next;
+  assert.equal((await loop.plan(1)).mode, 'analyze');
+  assert.equal(api.record.value.blockedContext, null); assert.equal(fix.mode, 'fix');
+});
+test('a changed clean context after the repair limit can certify without another automatic fix', async () => {
+  const { api, loop } = setup(); api.addFinding(); api.record.value = { ...initialState(), iteration: 5 };
+  const plan = await loop.plan(1); await loop.decide(plan, classify(plan, 'actionable'));
+  assert.equal((await loop.plan(1)).state, 'LOOP_LIMIT_REACHED');
+  api.threadsData[0].isResolved = true;
+  const changed = await loop.plan(1); assert.equal(changed.mode, 'analyze'); assert.equal(changed.decision, 'analyze-only');
+  const clean = await loop.decide(changed, classify(changed));
+  assert.equal(await loop.ready(clean, { validated: true }), 'READY_TO_MERGE');
+  assert.equal(api.record.value.iteration, 5);
+});
+test('a human correction at the repair limit accepts its new completed clean HEAD', async () => {
+  const { api, loop } = setup(); api.addFinding(); api.record.value = { ...initialState(), iteration: 5 };
+  const p = await loop.plan(1); await loop.decide(p, classify(p, 'actionable'));
+  api.pr.head.sha = next; api.summarySha = next;
+  const changed = await loop.plan(1); assert.equal(changed.mode, 'analyze');
+  const clean = await loop.decide(changed, classify(changed));
+  assert.equal(await loop.ready(clean, { validated: true }), 'READY_TO_MERGE');
+  assert.equal(api.record.value.iteration, 5);
+});

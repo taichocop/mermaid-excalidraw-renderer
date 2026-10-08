@@ -45,7 +45,7 @@ Runningが現在HEADのsubmitted reviewと同時に存在する場合も、Runni
 
 `.github/workflows/agent-loop.yml` はイベントを現在のPRへ紐付け、`agent-loop-iteration.yml` をdispatchする軽量入口。repair自体は行わない。
 
-入口は実測したissue comment/review/inlineイベント、PR状態変更、CI workflow完了、external check/status、手動dispatch、15分間隔reconcile。reconcileはopt-in PRと待機・ready・中断状態だけを一度確認して終了する。
+入口は実測したissue comment/review/inlineイベント、PR状態変更、CI workflow完了、external check/status、手動dispatch、15分間隔reconcile。reconcileはopt-in PRと待機・ready・中断・上限到達状態だけを一度確認して終了する。上限到達で処理済みfingerprintが同じなら解析せず終了し、変更済みcontextだけを再評価する。
 
 GitHub Actions自身が作ったcheck suiteやActionsに関連するHEADにはcheck_run/check_suiteイベントが発火しない制限がある。そのため既存 `Validate plugin` のworkflow_run、external status、15分の低頻度reconcileを併用し、他checkの終了を取りこぼしても永遠に待たない。`pull_request_review_thread`はGitHub App webhookでありActions triggerとしては未サポートなので購読せず、threadのresolve/unresolveもreconcileで確認する。
 
@@ -75,7 +75,7 @@ analysisとfixのdrop-sudo Actionを同じrunnerで繰り返さない。Action�
 
 validationは指定HEADへpatchを適用し、lint/typecheck/tests/build/browserを実行する。変更が検証中に増えていないこととexact treeを確認する。publisherは名前ではなくimmutable artifact IDで元candidateとvalidation artifactを別々に再取得し、planとdigestを照合する。fresh checkoutへ元candidate patchを適用し、検証済みcanonical diffとtree SHAの両方を確認する。validation runnerが元candidateの内容を差し替えることはできない。PRコードを実行しないpublisherだけがpush tokenを受け取る。Git hooks/fsmonitor/user configを無効化し、親HEADを確認し、expected remote SHAのlease付きで1commitをpushする。
 
-patchはworkspaceへ適用する前に独立した仮indexへ適用し、rename検出を無効化したHEADとの差分から削除元・追加先の両方を検査する。numstatのdestinationだけに依存せず、workflow/controller/agent instructions/git設定等のprotected path変更は自動publishを拒否する。PR #1の制御コード変更は、このInteractiveの明示的な実装依頼として人間がレビュー可能なPRへ反映する。公開repoのfork PRは自動修正対象外。同repositoryのopen・non-draft・`agent-loop`付きPRのみ対象。
+patchはworkspaceへ適用する前に独立した仮indexへ適用し、rename検出を無効化したHEADとの差分から削除元・追加先の両方を検査する。numstatのdestinationだけに依存せず、workflow/controller/agent instructions/git設定等のprotected path変更は自動publishを拒否する。symlink/gitlink等の未対応file modeも仮indexから検出して拒否する。typed protected-path failureはvalidation/publishingのjob outputでfailure handlerへ引き継ぎ、`BLOCKED`とfingerprintを保存する。同じcontextでは再修正せず、新HEAD等の人間の変更後に再評価する。PR #1の制御コード変更は、このInteractiveの明示的な実装依頼として人間がレビュー可能なPRへ反映する。公開repoのfork PRは自動修正対象外。同repositoryのopen・non-draft・`agent-loop`付きPRのみ対象。
 
 ## Fingerprint / dedupe / stale plan
 
@@ -133,9 +133,9 @@ validated/reserve-push/publishedはclean checkoutとexact commit SHAを確認す
 
 ## Iteration / recovery
 
-iterationは検証済みReview→Fix→Pushの成功回数。初期implementation、解析、重複イベント、request、CI再確認、validation失敗では増えない。既定 `MAX_AGENT_ITERATIONS=5`。5回目のpushへのfinal reviewがcleanなら認定できる。さらにactionableなら `LOOP_LIMIT_REACHED` で6回目のfixを止める。
+iterationは検証済みReview→Fix→Pushの成功回数。初期implementation、解析、重複イベント、request、CI再確認、validation失敗では増えない。既定 `MAX_AGENT_ITERATIONS=5`。5回目のpushへのfinal reviewがcleanなら認定できる。さらにactionableなら `LOOP_LIMIT_REACHED` で6回目のfixを止める。停止後でも人間の修正commitやreview/thread変更によりcontextが変わればanalyze-onlyで再評価し、cleanなら追加の自動修正を行わず認定できる。
 
-push前にSHA・親SHA・context・次iterationを保存する。push成功後の中断は現在HEADと予約SHAを照合して一度だけ計数する。予約SHAが現在HEADに存在しなければ `BLOCKED` として人間が確認する。取り残されたrun leaseはrun completionを確認して再取得する。workflow_dispatchで任意のPRをreconcileできる。
+push前にSHA・親SHA・context・次iterationを保存する。push成功後の中断は現在HEADと予約SHAを照合して一度だけ計数する。予約SHAが現在HEADに存在しなければ `BLOCKED` として人間が確認する。取り残されたrun leaseはActions read権限を持つplan jobがrun completionを確認して再取得する。workflow_dispatchで任意のPRをreconcileできる。
 
 ## READY_TO_MERGE / invalidation
 
@@ -148,7 +148,7 @@ push前にSHA・親SHA・context・次iterationを保存する。push成功後�
 - 同HEADかつ対象PR番号に紐付くValidate plugin PR run成功、required/その他CI checks/statuses green。
 - iteration <= max。
 
-CI workflowは安定したworkflow IDで識別し、pathを使う場合は`@ref`を除去する。必要checkを取得できないprotected branchは不明をgreenにしない。CI pending/failureは`WAITING_FOR_CI`に保存する。ready snapshotのHEAD/fingerprint/CI/mergeability/label変更はagent-readyを削除して適切な状態へ戻す。完了summaryは同じ認定snapshotにつき1回だけ投稿する。
+commit statusは専用の`/commits/{sha}/statuses`一覧APIで全pageを取得する。CI workflowは安定したworkflow IDで識別し、pathを使う場合は`@ref`を除去する。必要checkを取得できないprotected branchは不明をgreenにしない。CI pending/failureは`WAITING_FOR_CI`に保存する。ready snapshotのHEAD/fingerprint/CI/mergeability/label変更はagent-readyを削除して適切な状態へ戻す。完了summaryは同じ認定snapshotにつき1回だけ投稿する。
 
 ## Production設定
 

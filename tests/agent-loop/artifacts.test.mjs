@@ -71,3 +71,18 @@ test('the secret-bearing fix runner does not execute PR package scripts before C
   const fix = workflow.split('  fix:')[1].split('  candidate:')[0];
   assert.doesNotMatch(fix, /run:.*(?:npm|npx|yarn|pnpm)/);
 });
+test('gitlink additions are rejected and expose the protected failure classification', t => {
+  const h = checkout(t);
+  const patch = 'diff --git a/dependency b/dependency\nnew file mode 160000\nindex 0000000..aaaaaaa\n--- /dev/null\n+++ b/dependency\n@@ -0,0 +1 @@\n+Subproject commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n';
+  writeFileSync(join(h.loop, 'candidate.json'), JSON.stringify({ patch, patchHash: hash(patch), plan: { headSha: h.headSha } }));
+  const result = h.run('materialize'); assert.notEqual(result.status, 0); assert.match(result.stderr, /protected-path/);
+  assert.match(result.stdout, /failure_kind=protected-path/);
+  assert.equal(h.git(['status', '--porcelain']), '');
+});
+test('failure job carries protected-path outputs and plan can reclaim terminated Actions leases', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/agent-loop-iteration.yml', import.meta.url), 'utf8');
+  const plan = workflow.split('  plan:')[1].split('  analyze:')[0]; assert.match(plan, /actions: read/);
+  const validator = workflow.split('  validate:')[1].split('  publish:')[0];
+  assert.match(validator, /failure_kind:.*steps.materialize.outputs.failure_kind/);
+  assert.match(workflow.split('  failure:')[1], /FAILURE_KIND:.*needs.validate.outputs.failure_kind.*needs.publish.outputs.failure_kind/);
+});
