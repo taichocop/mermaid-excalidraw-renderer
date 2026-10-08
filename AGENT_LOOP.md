@@ -79,7 +79,7 @@ patchはworkspaceへ適用する前に独立した仮indexへ適用し、rename�
 
 ## Fingerprint / dedupe / stale plan
 
-fingerprintにはfull HEAD、review ID/state/body、summaryの実測epoch/SHA/phase、current HEADのコメントID/body、discussion、threadのresolved/outdated状態を正規化してSHA-256へ含める。avatarやAPI取得時刻は含めない。
+fingerprintにはfull HEAD、PR base ref/SHA、review ID/state/body、summaryの実測epoch/SHA/phase、current HEADのコメントID/body、discussion、threadのresolved/outdated状態を正規化してSHA-256へ含める。avatarやAPI取得時刻は含めない。
 
 dedupe keyは `reviewId:headSha:fingerprint`。review IDが同じでも内容が変わったらreadyを無効化して再分析する。解析前、candidate作成前、validation後のcommit/push予約前、ready判定前にcontextを取り直す。HEAD、review completion、fingerprintが変われば `STALE_PLAN` として古いpatchのpushを拒否する。次のイベント/reconcileで再分析する。
 
@@ -145,10 +145,10 @@ push前にSHA・親SHA・context・次iterationを保存する。push成功後�
 - current HEAD === full reviewed HEAD、最新Codex Review completed。
 - unresolved actionable Codex findings 0。severityに依存せず全sourceを分類済み。
 - 同HEADのlint/typecheck/tests/build/browser検証成功、protected-path violationなし。
-- 同HEADかつ対象PR番号に紐付くValidate plugin PR run成功、required/その他CI checks/statuses green。
+- 同HEADかつ対象PR番号および現在base ref/SHAに紐付くValidate plugin PR run成功、required/その他CI checks/statuses green。
 - iteration <= max。
 
-commit statusは専用の`/commits/{sha}/statuses`一覧APIで全pageを取得する。CI workflowは安定したworkflow IDで識別し、pathを使う場合は`@ref`を除去する。必要checkを取得できないprotected branchは不明をgreenにしない。CI pending/failureは`WAITING_FOR_CI`に保存する。ready snapshotのHEAD/fingerprint/CI/mergeability/label変更はagent-readyを削除して適切な状態へ戻す。完了summaryは同じ認定snapshotにつき1回だけ投稿する。
+PR base変更はfingerprintに含めてready/validationを無効化し、CIの`edited`イベントでも再検証する。Codex reviewのdismissal/comment deletionはaffected objectのimmutable Codex identityを認証して人間による無効化も受理する。適用branch rulesも全pageからrequired checksを取得する。commit statusは専用の`/commits/{sha}/statuses`一覧APIで全pageを取得する。CI workflowは安定したworkflow IDで識別し、pathを使う場合は`@ref`を除去する。必要checkを取得できないprotected branchは不明をgreenにしない。CI pending/failureは`WAITING_FOR_CI`に保存する。ready snapshotのHEAD/fingerprint/CI/mergeability/label変更はagent-readyを削除して適切な状態へ戻す。完了summaryは同じ認定snapshotにつき1回だけ投稿する。
 
 ## Production設定
 

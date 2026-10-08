@@ -41,7 +41,7 @@ class FakeGitHub {
   async addComment(number, body) { this.posts.push(body); return { id: this.posts.length }; }
   async resolveThread(id) { this.threadsData.find(thread => thread.id === id).isResolved = true; }
   async ciData() { return { workflowId: 42, ignoredRunIds: [], required: [], checks: [], statuses: [], runs: [{
-    pull_requests: [{ number: this.pr.number }], id: 10, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: this.pr.head.sha,
+    pull_requests: [{ number: this.pr.number, base: this.ciBase ?? this.pr.base }], id: 10, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: this.pr.head.sha,
     event: 'pull_request', status: this.green ? 'completed' : 'in_progress', conclusion: this.green ? 'success' : null,
   }] }; }
   addFinding() {
@@ -251,4 +251,17 @@ test('a human correction at the repair limit accepts its new completed clean HEA
   const clean = await loop.decide(changed, classify(changed));
   assert.equal(await loop.ready(clean, { validated: true }), 'READY_TO_MERGE');
   assert.equal(api.record.value.iteration, 5);
+});
+
+test('base edits invalidate ready and a repair snapshot; only matching-base CI can recertify', async () => {
+  const { api, loop } = setup(); const plan = await loop.plan(1), clean = await loop.decide(plan, classify(plan));
+  await loop.ready(clean, { validated: true });
+  api.ciBase = structuredClone(api.pr.base); api.pr.base = { ...api.pr.base, ref: 'release', sha: 'release-base' };
+  await assert.rejects(loop.assertPlan(plan), /STALE_PLAN/);
+  const changed = await loop.plan(1); assert.equal(changed.mode, 'analyze');
+  assert.ok(!api.pr.labels.some(label => label.name === 'agent-ready'));
+  const revalidated = await loop.decide(changed, classify(changed));
+  assert.equal(await loop.ready(revalidated, { validated: true }), 'WAITING_FOR_CI');
+  api.ciBase = api.pr.base;
+  assert.equal(await loop.ready(await loop.plan(1)), 'READY_TO_MERGE');
 });

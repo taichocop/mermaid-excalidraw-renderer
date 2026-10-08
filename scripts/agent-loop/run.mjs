@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { GitHub } from './github.mjs';
 import { AgentLoop } from './service.mjs';
-import { CODEX_IDENTITY, isCodex, eligible, parseSummary, parseAnalysis, hash, protectedPath } from './core.mjs';
+import { CODEX_IDENTITY, isCodex, isCodexReviewEvent, eligible, parseSummary, parseAnalysis, hash, protectedPath } from './core.mjs';
 
 const env = process.env;
 const repository = env.GITHUB_REPOSITORY || 'taichocop/mermaid-excalidraw-renderer';
@@ -35,7 +35,7 @@ async function dispatch() {
     prs = [event.issue.number];
   } else if (name === 'pull_request_review' || name === 'pull_request_review_comment') {
     const item = event.review || event.comment;
-    if (!isCodex(event.sender, identity) || !isCodex(item?.user, identity, item?.performed_via_github_app)) return;
+    if (!isCodexReviewEvent(name, event, identity)) return;
     prs = [event.pull_request.number]; sha = item.commit_id;
   } else if (event.pull_request) prs = [event.pull_request.number];
   else if (name === 'workflow_dispatch' && event.inputs.pr_number) prs = [Number(event.inputs.pr_number)];

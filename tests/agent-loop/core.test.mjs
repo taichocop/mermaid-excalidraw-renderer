@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CODEX_IDENTITY, STATES, initialState, migrateState, onHead, isCodex, parseSummary,
-  lifecycleDecision, processed, reviewRequestDecision, parseAnalysis, ciGreen, assertFresh } from '../../scripts/agent-loop/core.mjs';
+  lifecycleDecision, processed, reviewRequestDecision, parseAnalysis, ciGreen, assertFresh, isCodexReviewEvent } from '../../scripts/agent-loop/core.mjs';
 import { buildContext } from '../../scripts/agent-loop/review.mjs';
 
 const actor = { login: CODEX_IDENTITY.login, id: Number(CODEX_IDENTITY.id), type: 'Bot' };
@@ -95,21 +95,22 @@ test('analysis requires all source IDs exactly once; no severity-based omission'
   assert.throws(() => parseAnalysis({ findings: [{ id: 'one', status: 'resolved', reason: 'fixed' }, { id: 'one', status: 'resolved', reason: 'fixed' }] }, sources));
   assert.equal(parseAnalysis({ findings: sources.map(s => ({ ...s, status: 'actionable', reason: 'Concrete defect' })) }, sources).length, 2);
 });
-const run = { pull_requests: [{ number: 1 }], id: 1, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: sha, event: 'pull_request', status: 'completed', conclusion: 'success' };
+const base = { ref: 'main', sha: 'base' };
+const run = { pull_requests: [{ number: 1, base }], id: 1, workflow_id: 42, path: '.github/workflows/ci.yml@main', head_sha: sha, event: 'pull_request', status: 'completed', conclusion: 'success' };
 const check = { id: 1, name: 'validate', app: { id: 1 }, status: 'completed', conclusion: 'success' };
 test('CI uses stable workflow ID or strips @ref, and cannot trust old/push CI', () => {
-  assert.equal(ciGreen([run], [check], [], sha, 42, [], [], 1), true);
-  assert.equal(ciGreen([run], [check], [], sha, null, [], [], 1), true);
-  assert.equal(ciGreen([{ ...run, head_sha: other }], [], [], sha, 42, [], [], 1), false);
-  assert.equal(ciGreen([{ ...run, event: 'push' }], [], [], sha, 42, [], [], 1), false);
-  assert.equal(ciGreen([], [], [], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([run], [check], [], sha, 42, [], [], 1, base), true);
+  assert.equal(ciGreen([run], [check], [], sha, null, [], [], 1, base), true);
+  assert.equal(ciGreen([{ ...run, head_sha: other }], [], [], sha, 42, [], [], 1, base), false);
+  assert.equal(ciGreen([{ ...run, event: 'push' }], [], [], sha, 42, [], [], 1, base), false);
+  assert.equal(ciGreen([], [], [], sha, 42, [], [], 1, base), false);
 });
 test('pending, failed, missing required checks block readiness and later completion passes', () => {
   const pending = { ...check, id: 2, name: 'external', status: 'in_progress', conclusion: null };
-  assert.equal(ciGreen([run], [check, pending], [], sha, 42, [], [], 1), false);
-  assert.equal(ciGreen([run], [check, { ...pending, status: 'completed', conclusion: 'success' }], [], sha, 42, [], [], 1), true);
-  assert.equal(ciGreen([run], [check], [], sha, 42, [], [{ context: 'missing' }], 1), false);
-  assert.equal(ciGreen([run], [check], [{ id: 2, context: 'security', state: 'failure' }], sha, 42, [], [], 1), false);
+  assert.equal(ciGreen([run], [check, pending], [], sha, 42, [], [], 1, base), false);
+  assert.equal(ciGreen([run], [check, { ...pending, status: 'completed', conclusion: 'success' }], [], sha, 42, [], [], 1, base), true);
+  assert.equal(ciGreen([run], [check], [], sha, 42, [], [{ context: 'missing' }], 1, base), false);
+  assert.equal(ciGreen([run], [check], [{ id: 2, context: 'security', state: 'failure' }], sha, 42, [], [], 1, base), false);
 });
 test('fifth fix is the last; final review can still certify clean', () => {
   assert.equal(lifecycleDecision({ ...onHead(initialState(), sha), iteration: 5 }, completed), 'analyze-only');
@@ -139,9 +140,26 @@ test('another PR using the same HEAD cannot supply successful validation for thi
   const otherPR = { ...run, id: 99, pull_requests: [{ number: 2 }] };
   for (const status of ['in_progress', 'completed']) {
     const current = { ...run, status, conclusion: status === 'completed' ? 'failure' : null };
-    assert.equal(ciGreen([current, otherPR], [], [], sha, 42, [], [], 1), false);
+    assert.equal(ciGreen([current, otherPR], [], [], sha, 42, [], [], 1, base), false);
   }
-  assert.equal(ciGreen([otherPR], [], [], sha, 42, [], [], 1), false);
-  assert.equal(ciGreen([{ ...run, pull_requests: [] }], [], [], sha, 42, [], [], 1), false);
-  assert.equal(ciGreen([run, otherPR], [], [], sha, 42, [], [], 1), true);
+  assert.equal(ciGreen([otherPR], [], [], sha, 42, [], [], 1, base), false);
+  assert.equal(ciGreen([{ ...run, pull_requests: [] }], [], [], sha, 42, [], [], 1, base), false);
+  assert.equal(ciGreen([run, otherPR], [], [], sha, 42, [], [], 1, base), true);
+});
+test('CI must match this PR base ref and SHA after retargeting or base advancement', () => {
+  const retargeted = { ref: 'release', sha: 'release-base' };
+  assert.equal(ciGreen([run], [], [], sha, 42, [], [], 1, retargeted), false);
+  assert.equal(ciGreen([run], [], [], sha, 42, [], [], 1, { ...base, sha: 'advanced-main' }), false);
+  const fresh = { ...run, id: 3, pull_requests: [{ number: 1, base: retargeted }] };
+  assert.equal(ciGreen([run, { ...fresh, status: 'queued', conclusion: null }], [], [], sha, 42, [], [], 1, retargeted), false);
+  assert.equal(ciGreen([run, fresh], [], [], sha, 42, [], [], 1, retargeted), true);
+});
+test('human invalidations authenticate the affected Codex object rather than its deleting actor', () => {
+  const human = { login: 'maintainer', id: 1, type: 'User' }, object = { user: actor, performed_via_github_app: { id: Number(CODEX_IDENTITY.appId), slug: CODEX_IDENTITY.appSlug } };
+  assert.equal(isCodexReviewEvent('pull_request_review', { action: 'dismissed', sender: human, review: object }), true);
+  assert.equal(isCodexReviewEvent('pull_request_review', { action: 'submitted', sender: human, review: object }), false);
+  assert.equal(isCodexReviewEvent('pull_request_review_comment', { action: 'deleted', sender: human, comment: object }), true);
+  assert.equal(isCodexReviewEvent('pull_request_review_comment', { action: 'created', sender: human, comment: object }), false);
+  assert.equal(isCodexReviewEvent('pull_request_review', { action: 'dismissed', sender: human, review: { user: human } }), false);
+  assert.equal(isCodexReviewEvent('pull_request_review', { action: 'submitted', sender: actor, review: object }), true);
 });
