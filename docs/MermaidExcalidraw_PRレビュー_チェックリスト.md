@@ -1,6 +1,6 @@
 # Mermaid Excalidraw Renderer PRレビュー チェックリスト
 
-最終更新: 2026-10-07
+最終更新: 2026-10-08
 
 ## 要件
 
@@ -65,3 +65,15 @@
 - [ ] READMEを必要に応じて更新した
 - [ ] Breaking changeならADR/CHANGELOGを更新した
 
+
+## Agent Loop
+
+- [ ] latest HEADのCodex reviewがCompletedで、full SHAが一致
+- [ ] current HEADのunresolved/not outdated actionable findings 0、P1 0
+- [ ] lint/typecheck/unit/Agent Loop/browser/build成功、required CI green
+- [ ] analysis/fix/validation/publishがfresh runnerへ分離
+- [ ] fingerprint変更で再評価し、stale planをpublish/resolveしない
+- [ ] Productionはstate保存で終了、Interactiveだけ30–60秒polling
+- [ ] fallbackはpolicy/grace/同HEAD最大1回、Running中は要求しない
+- [ ] CI後続completionと低頻度reconcileで再開できる
+- [ ] READYでもmerge/tag/release/Directory提出は人間

@@ -1,6 +1,6 @@
 # Mermaid Excalidraw Renderer ADR / 設計判断記録
 
-最終更新: 2026-10-07
+最終更新: 2026-10-08
 
 ## ADR-001 Mermaid converter を自作しない
 
@@ -130,3 +130,129 @@ manifest/package/lock/versions/tagを検証し、production bundleのexternal im
 **Status:** Accepted (native acceptance, 2026-10-08)
 
 minAppVersionとversions.jsonを1.14.4へ揃える。今回のproduction bundleでmacOS Obsidian 1.14.4のnative acceptance（主要5種のLight/Dark、設定保存/再ロード、20図、note切替、disable/re-enable）を完了した。1.13.7の過去の記録を今回の配布候補の検証結果とは扱わない。使用API自体の導入版は低いが、ブラウザー/フォント/Excalidrawまで含む初回版のサポート範囲は実測を優先する。古い版への対応を広げる場合は最終配布物で検証して下限を下げる。ID/name/plugin versionとdesktop-only方針は維持する。
+
+---
+
+## ADR-011 Codex Review待機を正式Stateとする
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+未開始をWAITING_FOR_REVIEW_START、実測RunningをWAITING_FOR_REVIEWとして分ける。pushだけで開始・完了を仮定しない。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-012 Productionはevent-drivenで待機する
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+1 workflow最大1 iteration。待機stateを永続化して終了し、イベントと低頻度reconciliationで再開する。Actionsでreview待ちのsleep/pollingをしない。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-013 Interactive Codex sessionではpollingを許容する
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+人間が収束まで依頼したsessionは30–60秒でstatus確認し、Productionと同じState machineを用いる。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-014 current HEADと一致するreviewのみ有効とする
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+full reviewedHeadSha === currentHeadShaを完了/READYの必須条件とする。短縮SHAはAPIで一意に解決し、古いreviewを現在の判断に使わない。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-015 未開始のreviewに限定したfallbackを許可する
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+2026-10-08の更新仕様13/14節を採用。現在HEADのreview未開始かつgrace後だけ、comment-fallback policyで要求する。実測PR #1ではpush後も以前のHEADのsummaryが残ったため、既定は7分後fallbackとする。Running中は要求しない。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-016 同HEADへの自動requestは最大1回
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+reviewRequestHeadSha/Attempts/Atを投稿前に予約し、delivery不明でも再送しない。new HEADだけcounterをresetする。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-017 review IDとfingerprintを併用してdedupeする
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+HEAD、review/summary、comment body/discussion、thread stateのhashで判定する。同IDでも変化時は再評価し、fix中のcontext変更はpublish前に拒否する。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-018 Codexとvalidation/publish runnerを分離する
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+analysisとfixを別fresh runnerにし、各Actionを最後のstepにする。patch/structured resultだけをfresh validation runnerへ渡し、さらにfresh publisherでexact validated treeとreview fingerprintを照合する。background processをcredential-bearing runnerへ持ち込まない。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。
+
+---
+
+## ADR-019 READY_TO_MERGEでもmergeは人間が行う
+
+**Status:** Accepted (Agent Loop specification, 2026-10-08)
+
+### Decision
+
+agent-readyと認定summaryで完了を示す。merge/tag/release/Directory提出はAgent Loopから実行しない。HEAD/findings/CI/conflict/label変化でREADYを無効化する。
+
+### Reason
+
+review履歴、短いworkflow境界、失敗復旧と人間の最終判断を保つ。詳細は[Agent Loop運用設計](../AGENT_LOOP.md)。

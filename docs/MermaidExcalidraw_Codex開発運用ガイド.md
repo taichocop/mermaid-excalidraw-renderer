@@ -1,6 +1,6 @@
 # Mermaid Excalidraw Renderer Codex開発運用ガイド
 
-最終更新: 2026-10-07
+最終更新: 2026-10-08
 
 ## 1. Codexの役割
 
@@ -86,9 +86,19 @@ Self review
   ↓
 Build/Test
   ↓
-Human review
+Push
   ↓
-修正
+Codex Review (current HEAD, completed)
+  ↓
+Fix loop → Validation → Push → Review待機
+  ↓
+Codex Review clean
+  ↓
+CI green
+  ↓
+READY_TO_MERGE
+  ↓
+Human final review
   ↓
 Merge
 ```
@@ -106,3 +116,7 @@ any の乱用は禁止です。
 実装後に build、typecheck、関連testを実行し、変更ファイル・判断理由・検証結果・残課題を報告してください。
 ```
 
+
+## 10. Review/Fix Loop
+
+[Agent Loop運用設計](../AGENT_LOOP.md)を正とする。最新HEADとreviewed full SHAを一致させ、Running中は修正しない。Productionはstate保存後にrunを終了し、event/reconcileで再開する。Interactive sessionは30–60秒のpollingを許容する。grace後未開始の場合だけpolicyに従って同HEAD最大1回のfallbackを行う。analysis/fix/validation/publishのrunnerを分離し、fingerprintが変わったplanをpublishしない。検証済みfix/pushは最大5回。READYでもmerge/tag/release/Directory提出は人間が行う。

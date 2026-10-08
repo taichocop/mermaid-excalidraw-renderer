@@ -97,4 +97,39 @@ export class GitHub {
     catch (error) { if (error.status !== 422) throw error; }
     await this.repo(`/issues/${number}/labels`, 'POST', { labels: ['agent-ready'] });
   }
+  async addComment(number, body) {
+    return this.repo(`/issues/${number}/comments`, 'POST', { body });
+  }
+  async ciData(pr) {
+    const workflow = await this.repo('/actions/workflows/ci.yml');
+    const [runs, checks, statuses, branch] = await Promise.all([
+      this.pages(`/actions/runs?head_sha=${pr.head.sha}`, 'workflow_runs'),
+      this.pages(`/commits/${pr.head.sha}/check-runs?filter=latest`, 'check_runs'),
+      this.pages(`/commits/${pr.head.sha}/status`, 'statuses'),
+      this.repo(`/branches/${encodeURIComponent(pr.base.ref)}`),
+    ]);
+    let required = [];
+    if (branch.protected) {
+      const [owner, name] = this.repository.split('/');
+      const protection = await this.request('/graphql', 'POST', {
+        query: `query($owner:String!, $name:String!, $ref:String!) {
+          repository(owner:$owner, name:$name) { ref(qualifiedName:$ref) {
+            branchProtectionRule { requiredStatusChecks { context app { databaseId } } }
+          } }
+        }`, variables: { owner, name, ref: `refs/heads/${pr.base.ref}` },
+      });
+      if (protection.errors || !protection.data?.repository?.ref) throw new Error('Cannot verify required CI checks');
+      required = (protection.data.repository.ref.branchProtectionRule?.requiredStatusChecks ?? [])
+        .map(check => ({ context: check.context, app_id: check.app?.databaseId ?? null }));
+      const rules = await this.repo(`/rules/branches/${encodeURIComponent(pr.base.ref)}`);
+      required.push(...rules.filter(rule => rule.type === 'required_status_checks')
+        .flatMap(rule => rule.parameters.required_status_checks)
+        .map(check => ({ context: check.context, app_id: check.integration_id ?? null })));
+    }
+    const ignoredRunIds = runs.filter(run => ['.github/workflows/agent-loop.yml',
+      '.github/workflows/agent-loop-iteration.yml', '.github/workflows/codex-review-observer.yml']
+      .includes(run.path?.split('@')[0])).map(run => run.id);
+    return { workflowId: workflow.id, runs, checks, statuses, required, ignoredRunIds };
+  }
+
 }
