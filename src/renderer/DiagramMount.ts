@@ -4,6 +4,7 @@ import type { PluginSettings } from "../types";
 import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
 import { type DiagramData, MermaidConverter } from "./conversion";
 import { DiagramErrorBoundary, ExcalidrawView, InlineError } from "./ExcalidrawView";
+import type { ViewerKeymap } from "./viewOnlyBoundary";
 
 /** A rendering session owned by either a Markdown child or an editor widget. */
 export class DiagramMount {
@@ -21,6 +22,7 @@ export class DiagramMount {
     private appearance: ResolvedTheme,
     private readonly converter: MermaidConverter,
     private readonly onDispose: () => void,
+    private readonly keymap: ViewerKeymap,
   ) {}
 
   load(): void {
@@ -77,6 +79,7 @@ export class DiagramMount {
         ? createElement(ExcalidrawView, {
           data: this.data, appearance: this.appearance, settings: this.settings,
           container: this.containerEl,
+          keymap: this.keymap,
         })
         : createElement("div", { className: "mermaid-excalidraw-loading", role: "status" }, "Rendering diagram…");
     this.root.render(createElement(DiagramErrorBoundary, { key: this.generation, children: content }));

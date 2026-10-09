@@ -65,7 +65,7 @@ Dedicated `mermaid-excalidraw` blocks keep Obsidian’s existing code-block widg
 | Live Preview | Excalidraw outside the selection | Host renderer | Existing host code-block widget |
 | Source mode | Editable Markdown | Editable Markdown | Editable Markdown |
 
-Edit the source text to change the diagram. The view supports mouse/pen panning, wheel navigation and zoom controls; the embedded canvas UI blocks editing drawings, clipboard copy/paste, import/save controls, image export and editor dialogs in 0.1.2. Touch interaction is unsupported. Copy the Mermaid source from your note editor when needed.
+Edit the source text to change the diagram. The view supports mouse/pen panning, wheel navigation and zoom controls; the embedded canvas UI blocks editing drawings, clipboard copy/paste, import/save controls, image export and editor dialogs in 0.1.2. Host shortcuts are suspended while the viewer has focus; use Tab or Shift+Tab to return to host controls. Touch interaction is unsupported. Copy the Mermaid source from your note editor when needed.
 
 ### Sequence diagram
 

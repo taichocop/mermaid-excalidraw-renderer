@@ -3,6 +3,7 @@ import * as cmState from "@codemirror/state";
 import * as cmView from "@codemirror/view";
 import * as cmLanguage from "@codemirror/language";
 import { EditorHarness } from "./editor-harness";
+import { HostKeymapHarness } from "./host-keymap-harness";
 import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
@@ -18,6 +19,7 @@ interface TestPlugin extends mock.Plugin {
 type PluginClass = new () => TestPlugin;
 let plugin: TestPlugin;
 const editors = new EditorHarness(() => plugin.editorExtensions);
+const keyboardHost = new HostKeymapHarness(() => plugin.app, editors);
 const children = new Set<mock.MarkdownRenderChild>();
 
 type Block = { source: string; language: string };
@@ -49,6 +51,7 @@ function renderBlock({ source, language }: Block) {
 const harness = {
   stripInlineColors,
   editors,
+  keyboardHost,
   async boot(Plugin: PluginClass) {
     pluginClass = Plugin;
     plugin = new Plugin();
@@ -133,6 +136,24 @@ const harness = {
         }) ?? [],
       };
     });
+  },
+  // Corrupt only this disposable converter result to exercise the production
+  // view's handled redraw failure. No host/global/upstream API is patched.
+  corruptSceneSvg() {
+    const renderer: unknown = Reflect.get(plugin, "renderer");
+    if (typeof renderer !== "object" || renderer === null) throw new Error("No renderer");
+    const mounts: unknown = Reflect.get(renderer, "mounts");
+    if (!(mounts instanceof Set)) throw new Error("No mounts");
+    for (const mount of mounts) {
+      const data = Reflect.get(mount, "data") as DiagramData | null;
+      if (!data?.files) continue;
+      for (const [id, file] of Object.entries(data.files)) {
+        if (file.mimeType !== "image/svg+xml") continue;
+        data.files[id] = { ...file, dataURL: "data:image/svg+xml;base64,!" as typeof file.dataURL };
+        return;
+      }
+    }
+    throw new Error("No disposable SVG scene");
   },
   sceneSummaries() {
     return [...children].map((child) => {

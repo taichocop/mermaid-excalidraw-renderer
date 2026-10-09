@@ -12,7 +12,7 @@ import { applyAppearance } from "../appearance/applyAppearance";
 import { normalizeSvgFiles } from "../appearance/normalizeSvgFiles";
 import type { ResolvedTheme } from "../appearance/resolveTheme";
 import { errorMessage, type DiagramData } from "./conversion";
-import { installViewOnlyBoundary } from "./viewOnlyBoundary";
+import { installViewOnlyBoundary, type ViewerKeymap } from "./viewOnlyBoundary";
 import { canvasFitOptions } from "./layout";
 
 interface ViewProps {
@@ -20,6 +20,7 @@ interface ViewProps {
   appearance: ResolvedTheme;
   settings: PluginSettings;
   container: HTMLElement;
+  keymap: ViewerKeymap;
 }
 
 export function InlineError({ message }: { message: string }) {
@@ -46,8 +47,8 @@ const canvasActions = {
   loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false,
 } as const;
 
-export function ExcalidrawView({ data, appearance, settings, container }: ViewProps) {
-  useLayoutEffect(() => installViewOnlyBoundary(container), [container]);
+export function ExcalidrawView({ data, appearance, settings, container, keymap }: ViewProps) {
+  useLayoutEffect(() => installViewOnlyBoundary(container, keymap), [container, keymap]);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const converted = useRef<{ data: DiagramData; elements: ExcalidrawElement[] } | null>(null);

@@ -90,6 +90,26 @@ export class MarkdownView {
   getMode() { return this.mode; }
 }
 
+// Public parent-scope/stack model only; the real host's event order is supplied
+// separately by the regression fixture, before any viewer is mounted.
+export class Scope {
+  constructor(readonly parent?: Scope) {}
+}
+export class Keymap {
+  readonly scopes: Scope[] = [];
+  pushScope(scope: Scope) { this.scopes.push(scope); }
+  popScope(scope: Scope) {
+    const index = this.scopes.lastIndexOf(scope);
+    if (index !== -1) this.scopes.splice(index, 1);
+  }
+  reachesHost(host: Scope): boolean {
+    for (let scope: Scope | undefined = this.scopes.at(-1) ?? host; scope; scope = scope.parent) {
+      if (scope === host) return true;
+    }
+    return false;
+  }
+}
+
 export class Plugin {
   editorExtensions: Extension[] = [];
   editorExtensionsChanged: () => void = () => {};
@@ -106,7 +126,7 @@ export class Plugin {
   private cleanups: (() => void)[] = [];
   saved: unknown = null;
   settingTab: PluginSettingTab | null = null;
-  app = { workspace: {
+  app = { keymap: new Keymap(), scope: new Scope(), workspace: {
     views: [] as MarkdownView[],
     on: (_name: string, callback: () => void) => { this.events.push(callback); return callback; },
     onLayoutReady: (callback: () => void) => callback(),

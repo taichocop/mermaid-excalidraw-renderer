@@ -7,6 +7,7 @@
 ### Changed
 
 - Restrict both standard `mermaid` and dedicated `mermaid-excalidraw` embedded viewers to pan/zoom: block canvas/native-menu copy, paste/drop, context-menu export and editor/dialog shortcuts before upstream handlers. Host editors outside the viewer keep their normal behavior; desktop mouse/pen navigation remains available, touch interaction is unsupported.
+- Suspend inherited Obsidian shortcuts with a public parentless Scope only while a viewer has focus; restore host shortcuts on focus exit, window deactivation and disposal. This also protects against host keymaps that run before document capture, while retaining Tab and canvas zoom navigation.
 - Use Obsidian owner-document DOM helpers and cross-window SVG checks. Settings now expose all six searchable declarative controls through the existing validation/redraw/save path; remove deprecated slider tooltips.
 - Remove the host dark-canvas `!important` override while preserving monochrome theme contrast.
 - Document the bundle/Sync Standard limitation, retained upstream capabilities and legal/checksum assets. Desktop requirement remains Obsidian **1.14.4+**. Published 0.1.0 and 0.1.1 remain unchanged.
