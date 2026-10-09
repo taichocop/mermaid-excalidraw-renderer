@@ -104,3 +104,28 @@ it("registers Escape on the parentless scope, so an earlier host dispatcher can 
   expect(keys.popScope).toHaveBeenCalledTimes(1);
   register.mockRestore();
 });
+
+
+it("inherits the Modal scope for Tab but shadows app shortcuts and canvas navigation", () => {
+  const register = vi.spyOn(Scope.prototype, "register");
+  const parent = new Scope(), doc = new FixtureDocument(), viewer = new FixtureNode(doc), keys = keymap();
+  const dispose = installViewOnlyBoundary(viewer as unknown as HTMLElement, keys, { parentScope: parent });
+  doc.focus(viewer);
+  expect(Reflect.get(keys.pushScope.mock.calls[0]![0], "parent")).toBe(parent);
+  const handler = register.mock.calls[0]![2];
+  const context = { key: "", vkey: "", modifiers: "" };
+  const key = (value: string, options = {}) => {
+    const event = new Event("keydown", { cancelable: true }) as KeyboardEvent;
+    Object.assign(event, { key: value, code: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }, options);
+    return event;
+  };
+  expect(handler(key("Tab"), context)).toBeUndefined();
+  expect(handler(key("Tab", { shiftKey: true }), context)).toBeUndefined();
+  expect(handler(key("+", { code: "Equal", metaKey: true }), context)).toBe(true);
+  for (const value of ["o", "p", "/", "s", "c", "v"]) {
+    const event = key(value, { metaKey: true });
+    expect(handler(event, context)).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+  }
+  dispose(); register.mockRestore();
+});

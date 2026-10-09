@@ -93,10 +93,21 @@ export class MarkdownView {
 // Public parent-scope/stack model only; the real host's event order is supplied
 // separately by the regression fixture, before any viewer is mounted.
 export class Scope {
-  readonly handlers: { key: string | null; callback: (event: KeyboardEvent) => boolean | void }[] = [];
+  tabFocusContainerEl: HTMLElement | null = null;
+  readonly handlers: { modifiers: unknown; key: string | null; callback: (event: KeyboardEvent) => boolean | void }[] = [];
   constructor(readonly parent?: Scope) {}
-  register(_modifiers: unknown, key: string | null, callback: (event: KeyboardEvent) => boolean | void) {
-    const handler = { key, callback }; this.handlers.push(handler); return handler;
+  register(modifiers: unknown, key: string | null, callback: (event: KeyboardEvent) => boolean | void) {
+    const handler = { modifiers, key, callback }; this.handlers.push(handler); return handler;
+  }
+  handleKey(event: KeyboardEvent): boolean | void {
+    for (const handler of this.handlers) {
+      if (handler.key !== null && handler.key !== event.key) continue;
+      if (Array.isArray(handler.modifiers) && handler.modifiers.length === 0
+        && (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) continue;
+      const result = handler.callback(event);
+      if (result !== undefined || handler.key !== null || handler.modifiers !== null) return result;
+    }
+    return this.parent?.handleKey(event);
   }
 }
 export class Keymap {
@@ -106,6 +117,7 @@ export class Keymap {
     const index = this.scopes.lastIndexOf(scope);
     if (index !== -1) this.scopes.splice(index, 1);
   }
+  dispatch(event: KeyboardEvent): boolean | void { return this.scopes.at(-1)?.handleKey(event); }
   reachesHost(host: Scope): boolean {
     for (let scope: Scope | undefined = this.scopes.at(-1) ?? host; scope; scope = scope.parent) {
       if (scope === host) return true;
@@ -117,29 +129,40 @@ export class Keymap {
 /** Public Modal fixture only: native focus trapping/window selection still needs
  * desktop acceptance. The scope dispatch runs before viewer DOM capture. */
 export class Modal {
-  scope = new Scope();
+  scope: Scope;
+  shouldRestoreSelection = true;
   containerEl: HTMLElement;
   modalEl: HTMLElement;
   titleEl: HTMLElement;
   contentEl: HTMLElement;
   private opened = false;
   private previous: HTMLElement | null = null;
+  private readonly onFocus = (event: FocusEvent) => {
+    const active = this.app.keymap.scopes.at(-1);
+    const container = active?.tabFocusContainerEl; // Native does not inherit this.
+    if (container && event.target !== container.ownerDocument.body && !container.contains(event.target as Node)) {
+      queueMicrotask(() => {
+        if (this.app.keymap.scopes.at(-1) === active) {
+          container.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus({ preventScroll: true });
+        }
+      });
+    }
+  };
   private readonly onKey = (event: KeyboardEvent) => {
-    const scope = this.app.keymap.scopes.at(-1);
-    const handler = scope?.handlers.find(handler => handler.key === event.key);
-    if (handler) {
-      if (handler.callback(event) === false) { event.preventDefault(); event.stopImmediatePropagation(); }
-    } else if (event.key === "Escape" && scope === this.scope) {
-      event.preventDefault(); event.stopImmediatePropagation(); this.close();
+    if (this.app.keymap.dispatch(event) === false) {
+      event.preventDefault(); event.stopImmediatePropagation();
     }
   };
   constructor(private readonly app: Plugin["app"]) {
+    // Deliberately include app scope to verify child viewer shortcut isolation.
+    this.scope = new Scope(app.scope);
     const focused = document.activeElement;
     const doc = focused?.tagName === "IFRAME" ? (focused as HTMLIFrameElement).contentDocument! : document;
     this.containerEl = doc.createElement("div"); this.containerEl.className = "modal-container";
     const backdrop = doc.createElement("div"); backdrop.className = "modal-bg";
     backdrop.onclick = () => this.close();
     this.modalEl = doc.createElement("div"); this.modalEl.className = "modal";
+    this.scope.tabFocusContainerEl = this.containerEl;
     this.modalEl.setAttribute("role", "dialog"); this.modalEl.setAttribute("aria-modal", "true");
     this.titleEl = doc.createElement("h2"); this.titleEl.className = "modal-title";
     this.contentEl = doc.createElement("div"); this.contentEl.className = "modal-content";
@@ -158,16 +181,24 @@ export class Modal {
     doc.body.append(this.containerEl);
     this.app.keymap.pushScope(this.scope);
     doc.defaultView?.addEventListener("keydown", this.onKey, true);
+    doc.defaultView?.addEventListener("focusin", this.onFocus);
     this.onOpen();
   }
   close() {
     if (!this.opened) return;
     this.opened = false;
     this.containerEl.ownerDocument.defaultView?.removeEventListener("keydown", this.onKey, true);
+    this.containerEl.ownerDocument.defaultView?.removeEventListener("focusin", this.onFocus);
     this.app.keymap.popScope(this.scope);
     this.containerEl.remove();
-    if (this.previous?.isConnected) this.previous.focus({ preventScroll: true });
     this.onClose();
+    // Match desktop order: onClose first, saved host window/focus afterwards.
+    if (this.shouldRestoreSelection && this.previous?.isConnected) {
+      this.previous.ownerDocument.defaultView?.focus();
+      this.previous.focus({ preventScroll: true });
+    }
+    // Model a trailing host reactivation independently of selection restoration.
+    this.containerEl.ownerDocument.defaultView?.focus();
   }
   onOpen() {}
   onClose() {}

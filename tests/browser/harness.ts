@@ -76,8 +76,8 @@ const harness = {
   mountSamples(names: (keyof typeof samples)[], language = "mermaid-excalidraw") {
     names.forEach((name) => harness.mount(samples[name], language));
   },
-  mountInFrame(source: string) {
-    const frame = document.createElement("iframe"); frame.id = "popout-fixture";
+  mountInFrame(source: string, id = "popout-fixture") {
+    const frame = document.createElement("iframe"); frame.id = id;
     frame.style.width = "1000px"; frame.style.height = "800px";
     document.body.append(frame);
     const doc = frame.contentDocument!;

@@ -13,6 +13,11 @@ export class HostKeymapHarness {
     this.effects = [];
     const target = phase === "window" ? window : document;
     const onKey = (event: KeyboardEvent) => {
+      const result = this.app().keymap.dispatch(event);
+      if (result !== undefined) {
+        if (result === false) { event.preventDefault(); event.stopImmediatePropagation(); }
+        return;
+      }
       if ((!event.metaKey && !event.ctrlKey) || !this.app().keymap.reachesHost(this.app().scope)) return;
       if (event.code === "KeyO") {
         this.effects.push("quickswitcher");

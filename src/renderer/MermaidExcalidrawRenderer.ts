@@ -41,7 +41,11 @@ export class MermaidExcalidrawRenderer {
       appearance ?? resolveTheme(container, this.settings.themeMode), this.converter, () => this.mounts.delete(mount), this.app.keymap, {
         open: (mount, opener) => {
           if (this.disposed || !mount.data || this.preview?.mount === mount) return;
-          this.preview?.close();
+          this.preview?.closeForReplacement();
+          // Base Modal.close may reactivate its old window even without saved
+          // selection restoration. Reassert the new target before construction.
+          opener.ownerDocument.defaultView?.focus();
+          opener.focus({ preventScroll: true });
           const modal = new DiagramPreviewModal(this.app, mount, opener, () => {
             if (this.preview === modal) this.preview = null;
           });

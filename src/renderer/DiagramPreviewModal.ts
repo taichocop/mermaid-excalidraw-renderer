@@ -11,11 +11,34 @@ export class DiagramPreviewModal extends Modal {
   private viewer: HTMLElement | null = null;
   private readonly closePreview = () => this.close();
   private ownerWindow: Window | null = null;
+  private restoreOpenerFocus = true;
 
   constructor(app: App, readonly mount: DiagramMount, private readonly opener: HTMLButtonElement,
     private readonly closed: () => void) {
     super(app);
     this.setTitle("Mermaid diagram preview");
+    // Scope parentage does not inherit the native tabFocusContainerEl field.
+    // Use public DOM focus and key registration to contain Tab in both directions.
+    this.scope.register(null, "Tab", event => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return true;
+      const controls = [...this.modalEl.querySelectorAll<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]",
+      )].filter(node => node.tabIndex >= 0 && !node.matches(":disabled")
+        && !node.closest('[inert], [aria-hidden="true"]') && node.getClientRects().length > 0
+        && node.ownerDocument.defaultView?.getComputedStyle(node).visibility === "visible");
+      const current = controls.indexOf(this.modalEl.ownerDocument.activeElement as HTMLElement);
+      if (controls.length && (current === -1 || (event.shiftKey ? current === 0 : current === controls.length - 1))) {
+        (event.shiftKey ? controls.at(-1) : controls[0])?.focus({ preventScroll: true });
+        return false;
+      }
+      return true; // Allow ordinary DOM navigation without inherited app keys.
+    });
+  }
+
+  closeForReplacement(): void {
+    this.restoreOpenerFocus = false;
+    this.shouldRestoreSelection = false;
+    this.close();
   }
 
   onOpen(): void {
@@ -42,7 +65,7 @@ export class DiagramPreviewModal extends Modal {
     if (!props || !this.root || !this.viewer) return;
     this.viewer.style.setProperty("--background-primary", props.appearance.background);
     this.root.render(createElement(DiagramErrorBoundary, { children: createElement(ExcalidrawView, {
-      ...props, container: this.viewer, onClose: this.closePreview,
+      ...props, container: this.viewer, onClose: this.closePreview, modalScope: this.scope,
     }) }));
   }
 
@@ -55,6 +78,6 @@ export class DiagramPreviewModal extends Modal {
     this.contentEl.replaceChildren();
     this.closed();
     // A disposed/replaced editor widget is no longer a valid focus target.
-    if (this.opener.isConnected) this.opener.focus({ preventScroll: true });
+    if (this.restoreOpenerFocus && this.opener.isConnected) this.opener.focus({ preventScroll: true });
   }
 }

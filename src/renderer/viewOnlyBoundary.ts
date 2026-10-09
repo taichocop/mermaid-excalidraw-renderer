@@ -18,7 +18,7 @@ export function isViewNavigationKey(event: Pick<KeyboardEvent, "key" | "code" | 
 
 const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content, .mermaid-excalidraw-controls";
 
-interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean }
+interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean; parentScope?: Scope }
 
 /** A scoped DOM integration boundary, not a patch of upstream internals or
  * host clipboard/network APIs. Capture precedes upstream document copy handlers
@@ -34,16 +34,26 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
       && node.instanceOf(Node) && container.contains(node);
   };
   const focused = () => inside(doc.activeElement);
-  // Host keymaps can run before our document capture. A public parentless
-  // Scope prevents inherited host commands while focus is in this viewer;
-  // navigation still reaches the canvas through the existing DOM allowlist.
-  const scope = new Scope();
-  // This parentless scope sits above Modal.scope. Register Escape here too:
-  // native host keymaps may consume it before DOM capture reaches the Modal.
+  const cancel = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
+  const allowedKey = (event: KeyboardEvent) => {
+    const navigationControl = inside(event.target) && event.target.instanceOf(Element)
+      && event.target.closest(NAVIGATION_CONTROLS) && ["Enter", " "].includes(event.key)
+      && !event.ctrlKey && !event.metaKey && !event.altKey;
+    return navigationControl || isViewNavigationKey(event);
+  };
+  // Keep the public Modal scope for Tab containment, but shadow inherited app
+  // shortcuts before earlier host capture can run them.
+  const scope = new Scope(options.parentScope);
+  // Keep explicit Escape handling before DOM capture as well.
   if (options.onEscape) scope.register(null, "Escape", event => {
     event.preventDefault();
     options.onEscape?.();
     return false;
+  });
+  scope.register(null, null, event => {
+    if (event.key === "Tab") return undefined; // Delegate to Modal's public Tab handler.
+    if (!allowedKey(event)) { cancel(event); return false; }
+    return true; // Canvas navigation reaches DOM, not inherited app commands.
   });
   let scopeActive = false;
   const releaseScope = () => {
@@ -57,7 +67,6 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   const onFocusOut = (event: FocusEvent) => {
     if (inside(event.target) && !inside(event.relatedTarget)) releaseScope();
   };
-  const cancel = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
   const onClipboard = (event: Event) => {
     if (inside(event.target) || focused()) cancel(event);
   };
@@ -65,9 +74,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     if ((inside(event.target) || focused()) && event.key === "Escape" && options.onEscape) {
       cancel(event); options.onEscape(); return;
     }
-    const navigationControl = inside(event.target) && event.target.instanceOf(Element)
-      && event.target.closest(NAVIGATION_CONTROLS) && ["Enter", " "].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey;
-    if ((inside(event.target) || focused()) && !navigationControl && !isViewNavigationKey(event)) cancel(event);
+    if ((inside(event.target) || focused()) && !allowedKey(event)) cancel(event);
   };
   const onBlocked = (event: Event) => { if (inside(event.target)) cancel(event); };
   const onInteraction = (event: Event) => {

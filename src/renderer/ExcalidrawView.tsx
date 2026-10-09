@@ -8,6 +8,7 @@ import {
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI, Zoom } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { Scope } from "obsidian";
 import type { PluginSettings } from "../types";
 import { applyAppearance } from "../appearance/applyAppearance";
 import { normalizeSvgFiles } from "../appearance/normalizeSvgFiles";
@@ -30,6 +31,7 @@ export interface ViewProps {
   sceneCache: ViewSceneCache;
   onOpen?: (opener: HTMLButtonElement) => void;
   onClose?: () => void;
+  modalScope?: Scope;
 }
 
 export function InlineError({ message }: { message: string }) {
@@ -56,11 +58,11 @@ const canvasActions = {
   loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false,
 } as const;
 
-export function ExcalidrawView({ data, appearance, settings, container, keymap, sceneCache, onOpen, onClose }: ViewProps) {
+export function ExcalidrawView({ data, appearance, settings, container, keymap, sceneCache, onOpen, onClose, modalScope }: ViewProps) {
   const enlarged = !!onClose;
   useLayoutEffect(() => enlarged
-    ? installViewOnlyBoundary(container, keymap, { onEscape: onClose, blockWheel: true })
-    : undefined, [container, keymap, enlarged, onClose]);
+    ? installViewOnlyBoundary(container, keymap, { onEscape: onClose, blockWheel: true, parentScope: modalScope })
+    : undefined, [container, keymap, enlarged, onClose, modalScope]);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const pointer = useRef<{ x: number; y: number; moved: boolean } | null>(null);
