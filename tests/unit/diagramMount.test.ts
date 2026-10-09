@@ -19,7 +19,7 @@ it("discards out-of-order results even from a converter that ignores cancellatio
   const container = { style: {}, dataset: {} } as HTMLElement;
   const cleanup = vi.fn();
   const mount = new DiagramMount(container, "flowchart LR\nA-->B", DEFAULT_SETTINGS,
-    { theme: "light", background: "white", foreground: "#000000" }, converter, cleanup);
+    { theme: "light", background: "white", foreground: "#000000" }, converter, cleanup, { pushScope() {}, popScope() {} });
   mocks.render.mockClear(); mocks.unmount.mockClear();
   mount.load();
   mount.updateSettings({ ...DEFAULT_SETTINGS, fontSize: 24 });
@@ -49,7 +49,7 @@ it("passes errors as React text props and keeps adjacent sessions independent", 
   vi.spyOn(converter, "convert").mockResolvedValueOnce({ status: "error", message: "<img src=x>", cause: null })
     .mockResolvedValueOnce({ status: "success", data: { elements: [] } });
   const make = () => new DiagramMount({ style: {}, dataset: {} } as HTMLElement, "invalid", DEFAULT_SETTINGS,
-    { theme: "light", background: "white", foreground: "#000000" }, converter, vi.fn());
+    { theme: "light", background: "white", foreground: "#000000" }, converter, vi.fn(), { pushScope() {}, popScope() {} });
   const bad = make(), good = make();
   mocks.render.mockClear();
   bad.load(); good.load();

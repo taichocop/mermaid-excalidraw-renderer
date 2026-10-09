@@ -1,3 +1,4 @@
+import type { SettingDefinitionItem } from "obsidian";
 import type { PluginSettings } from "../../src/types";
 import { StateEffect, StateField, type Extension } from "@codemirror/state";
 
@@ -6,6 +7,25 @@ export const editorLivePreviewField = StateField.define<boolean>({
   create: () => true,
   update: (value, tr) => tr.effects.reduce((current, effect) => effect.is(livePreviewMode) ? effect.value : current, value),
 });
+
+// Model owner-document-preserving Obsidian DOM helpers in the fixture only.
+Node.prototype.createEl = function (tag, options) {
+  const doc = this.nodeType === 9 ? this as Document : this.ownerDocument!;
+  const element = doc.createElement(tag);
+  if (typeof options === "string") element.className = options;
+  else if (options?.cls) element.className = Array.isArray(options.cls) ? options.cls.join(" ") : options.cls;
+  this.appendChild(element);
+  return element;
+};
+Node.prototype.createDiv = function (options) { return this.createEl("div", options); };
+Node.prototype.instanceOf = function <T>(type: { new(): T }): this is Node & T {
+  // Detached XML documents have no defaultView. Model constructorWin by walking
+  // the node's real prototype chain, rather than using the importing realm.
+  for (let proto = Object.getPrototypeOf(this); proto; proto = Object.getPrototypeOf(proto)) {
+    if (proto.constructor.name === type.name) return true;
+  }
+  return false;
+};
 
 export class MarkdownRenderChild {
   private loaded = false;
@@ -70,6 +90,26 @@ export class MarkdownView {
   getMode() { return this.mode; }
 }
 
+// Public parent-scope/stack model only; the real host's event order is supplied
+// separately by the regression fixture, before any viewer is mounted.
+export class Scope {
+  constructor(readonly parent?: Scope) {}
+}
+export class Keymap {
+  readonly scopes: Scope[] = [];
+  pushScope(scope: Scope) { this.scopes.push(scope); }
+  popScope(scope: Scope) {
+    const index = this.scopes.lastIndexOf(scope);
+    if (index !== -1) this.scopes.splice(index, 1);
+  }
+  reachesHost(host: Scope): boolean {
+    for (let scope: Scope | undefined = this.scopes.at(-1) ?? host; scope; scope = scope.parent) {
+      if (scope === host) return true;
+    }
+    return false;
+  }
+}
+
 export class Plugin {
   editorExtensions: Extension[] = [];
   editorExtensionsChanged: () => void = () => {};
@@ -86,7 +126,7 @@ export class Plugin {
   private cleanups: (() => void)[] = [];
   saved: unknown = null;
   settingTab: PluginSettingTab | null = null;
-  app = { workspace: {
+  app = { keymap: new Keymap(), scope: new Scope(), workspace: {
     views: [] as MarkdownView[],
     on: (_name: string, callback: () => void) => { this.events.push(callback); return callback; },
     onLayoutReady: (callback: () => void) => callback(),
@@ -124,7 +164,25 @@ export class Plugin {
 export class PluginSettingTab {
   containerEl = Object.assign(document.createElement("aside"), { empty(this: HTMLElement) { this.replaceChildren(); } });
   constructor(_app: unknown, _plugin: unknown) {}
-  display() {}
+  getSettingDefinitions(): SettingDefinitionItem[] { return []; }
+  getControlValue(_key: string): unknown { return undefined; }
+  async setControlValue(_key: string, _value: unknown): Promise<void> {}
+  display() {
+    this.containerEl.replaceChildren();
+    // Only the six public control types used here, not an alternate host API.
+    for (const definition of this.getSettingDefinitions()) {
+      if (!("control" in definition) || !definition.control) continue;
+      const control = definition.control;
+      const setting = new Setting(this.containerEl).setName(definition.name);
+      const value = this.getControlValue(control.key) ?? control.defaultValue;
+      const changed = (value: unknown) => this.setControlValue(control.key, value);
+      if (control.type === "toggle") setting.addToggle(c => c.setValue(Boolean(value)).onChange(changed));
+      if (control.type === "slider") setting.addSlider(c => c.setLimits(control.min, control.max, control.step)
+        .setValue(Number(value)).onChange(changed));
+      if (control.type === "dropdown") setting.addDropdown(c => c.addOptions(control.options)
+        .setValue(String(value)).onChange(changed));
+    }
+  }
 }
 export class Notice { constructor(message: string) { console.info(message); } }
 export class Setting {

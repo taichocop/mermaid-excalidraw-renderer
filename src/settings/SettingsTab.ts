@@ -1,66 +1,66 @@
-import { PluginSettingTab, Setting, type App } from "obsidian";
+import { PluginSettingTab, type App, type SettingDefinitionItem } from "obsidian";
 import type { PluginSettings } from "../types";
-import { CANVAS_HEIGHT_RANGE, CANVAS_PADDING_RANGE, FONT_SIZE_RANGE } from "./settings";
+import { CANVAS_HEIGHT_RANGE, CANVAS_PADDING_RANGE, DEFAULT_SETTINGS, FONT_SIZE_RANGE } from "./settings";
 
 interface SettingsHost {
   settings: PluginSettings;
   updateSettings(settings: PluginSettings): Promise<void>;
 }
 
+type ControlKey = Exclude<keyof PluginSettings, "maxHeight">;
+const CONTROL_KEYS: readonly ControlKey[] = ["renderStandardMermaid", "fontSize", "roughness", "canvasHeight", "canvasPadding", "themeMode"];
+
 export class SettingsTab extends PluginSettingTab {
   constructor(app: App, plugin: ConstructorParameters<typeof PluginSettingTab>[1], private readonly host: SettingsHost) {
     super(app, plugin);
   }
 
-  display(): void {
-    this.containerEl.empty();
-    new Setting(this.containerEl)
-      .setName("Render standard mermaid blocks as Excalidraw")
-      .setDesc("On by default, including after upgrading. Changes immediately refresh Reading view and Live Preview. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render. Move the cursor into a block to edit its source.")
-      .addToggle((toggle) => toggle.setValue(this.host.settings.renderStandardMermaid)
-        .onChange(async (renderStandardMermaid) => {
-          await this.host.updateSettings({ ...this.host.settings, renderStandardMermaid });
-        }));
-    new Setting(this.containerEl)
-      .setName("Font size")
-      .setDesc("Diagram text size in pixels (12–48). Changes apply to open diagrams.")
-      .addSlider((slider) => slider.setLimits(FONT_SIZE_RANGE.min, FONT_SIZE_RANGE.max, 1)
-        .setValue(this.host.settings.fontSize).setDynamicTooltip()
-        .onChange(async (fontSize) => {
-          await this.host.updateSettings({ ...this.host.settings, fontSize });
-        }));
-    new Setting(this.containerEl)
-      .setName("Roughness")
-      .setDesc("Hand-drawn strokes: 0 = Clean, 1 = Architect, 2 = Artist. SVG fallback images keep their original geometry.")
-      .addDropdown((dropdown) => dropdown
-        .addOptions({ "0": "Clean", "1": "Architect", "2": "Artist" })
-        .setValue(String(this.host.settings.roughness))
-        .onChange(async (value) => {
-          await this.host.updateSettings({ ...this.host.settings, roughness: Number(value) });
-        }));
-    new Setting(this.containerEl)
-      .setName("Canvas height")
-      .setDesc("Canvas height in pixels (240–1200). Width follows the note (100%).")
-      .addSlider((slider) => slider.setLimits(CANVAS_HEIGHT_RANGE.min, CANVAS_HEIGHT_RANGE.max, 20)
-        .setValue(this.host.settings.canvasHeight).setDynamicTooltip()
-        .onChange(async (canvasHeight) => {
-          await this.host.updateSettings({ ...this.host.settings, canvasHeight });
-        }));
-    new Setting(this.containerEl)
-      .setName("Canvas padding")
-      .setDesc("Space around the diagram in pixels (16–128), with extra room for canvas controls. Reduced in very small panes.")
-      .addSlider((slider) => slider.setLimits(CANVAS_PADDING_RANGE.min, CANVAS_PADDING_RANGE.max, 1)
-        .setValue(this.host.settings.canvasPadding).setDynamicTooltip()
-        .onChange(async (canvasPadding) => {
-          await this.host.updateSettings({ ...this.host.settings, canvasPadding });
-        }));
-    new Setting(this.containerEl)
-      .setName("Theme")
-      .setDesc("Use Obsidian’s background with contrasting black or white lines and text. Updates open diagrams automatically.")
-      .addDropdown((dropdown) => dropdown.addOption("follow-obsidian", "Follow Obsidian")
-        .setValue(this.host.settings.themeMode)
-        .onChange(async () => {
-          await this.host.updateSettings({ ...this.host.settings, themeMode: "follow-obsidian" });
-        }));
+  getSettingDefinitions(): SettingDefinitionItem<ControlKey>[] {
+    return [
+      {
+        name: "Render standard mermaid blocks as Excalidraw",
+        desc: "On by default, including after upgrading. Changes immediately refresh Reading view and Live Preview. Turn off to restore Obsidian’s standard Mermaid display. Dedicated mermaid-excalidraw blocks always render. Move the cursor into a block to edit its source.",
+        control: { type: "toggle", key: "renderStandardMermaid", defaultValue: DEFAULT_SETTINGS.renderStandardMermaid },
+      },
+      {
+        name: "Font size",
+        desc: "Diagram text size in pixels (12–48). Changes apply to open diagrams.",
+        control: { type: "slider", key: "fontSize", ...FONT_SIZE_RANGE, step: 1, defaultValue: DEFAULT_SETTINGS.fontSize },
+      },
+      {
+        name: "Roughness",
+        desc: "Hand-drawn strokes: 0 = Clean, 1 = Architect, 2 = Artist. SVG fallback images keep their original geometry.",
+        control: { type: "dropdown", key: "roughness", options: { "0": "Clean", "1": "Architect", "2": "Artist" }, defaultValue: String(DEFAULT_SETTINGS.roughness) },
+      },
+      {
+        name: "Canvas height",
+        desc: "Canvas height in pixels (240–1200). Width follows the note (100%).",
+        control: { type: "slider", key: "canvasHeight", ...CANVAS_HEIGHT_RANGE, step: 20, defaultValue: DEFAULT_SETTINGS.canvasHeight },
+      },
+      {
+        name: "Canvas padding",
+        desc: "Space around the diagram in pixels (16–128), with extra room for canvas controls. Reduced in very small panes.",
+        control: { type: "slider", key: "canvasPadding", ...CANVAS_PADDING_RANGE, step: 1, defaultValue: DEFAULT_SETTINGS.canvasPadding },
+      },
+      {
+        name: "Theme",
+        desc: "Use Obsidian’s background with contrasting black or white lines and text. Updates open diagrams automatically.",
+        control: { type: "dropdown", key: "themeMode", options: { "follow-obsidian": "Follow Obsidian" }, defaultValue: DEFAULT_SETTINGS.themeMode },
+      },
+    ];
+  }
+
+  getControlValue(key: string): unknown {
+    if (!CONTROL_KEYS.includes(key as ControlKey)) return undefined;
+    const value = this.host.settings[key as ControlKey];
+    return key === "roughness" ? String(value) : value;
+  }
+
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    if (!CONTROL_KEYS.includes(key as ControlKey)) return;
+    // Dropdowns resolve strings; retain the plugin's validation, redraw and
+    // serialized-save path instead of the host's default storage convention.
+    const candidate = key === "roughness" && typeof value === "string" ? Number(value) : value;
+    await this.host.updateSettings({ ...this.host.settings, [key]: candidate });
   }
 }

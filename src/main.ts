@@ -19,7 +19,7 @@ export default class MermaidExcalidrawPlugin extends Plugin {
       console.error("[Mermaid Excalidraw Renderer] Could not load settings", error);
       new Notice("Mermaid Excalidraw: could not load settings; using defaults.");
     }
-    this.renderer = new MermaidExcalidrawRenderer(this.settings);
+    this.renderer = new MermaidExcalidrawRenderer(this.settings, this.app.keymap);
     this.livePreview = new LivePreview({
       isLivePreview: (state) => state.field(editorLivePreviewField, false) === true,
       settings: () => this.settings,

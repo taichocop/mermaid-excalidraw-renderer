@@ -4,6 +4,7 @@ import { MermaidConverter } from "./conversion";
 import { ExcalidrawRenderChild } from "./ExcalidrawRenderChild";
 import { DiagramMount } from "./DiagramMount";
 import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
+import type { ViewerKeymap } from "./viewOnlyBoundary";
 
 /** Independent of the registered block name so future integrations can reuse it. */
 export class MermaidExcalidrawRenderer {
@@ -13,11 +14,11 @@ export class MermaidExcalidrawRenderer {
   private readonly standardChildren = new Set<ExcalidrawRenderChild>();
   private disposed = false;
 
-  constructor(private settings: PluginSettings) {}
+  constructor(private settings: PluginSettings, private readonly keymap: ViewerKeymap) {}
 
   render(source: string, element: HTMLElement, context: MarkdownPostProcessorContext, standard = false): void {
     if (this.disposed) return;
-    const container = element.ownerDocument.createElement("div");
+    const container = element.createDiv();
     container.className = "mermaid-excalidraw-container";
     container.setAttribute("aria-label", "Mermaid diagram in Excalidraw view mode");
     element.replaceChildren(container);
@@ -36,7 +37,7 @@ export class MermaidExcalidrawRenderer {
 
   createMount(source: string, container: HTMLElement, appearance?: ResolvedTheme): DiagramMount {
     const mount = new DiagramMount(container, source, { ...this.settings },
-      appearance ?? resolveTheme(container, this.settings.themeMode), this.converter, () => this.mounts.delete(mount));
+      appearance ?? resolveTheme(container, this.settings.themeMode), this.converter, () => this.mounts.delete(mount), this.keymap);
     if (this.disposed) mount.dispose();
     else { this.mounts.add(mount); mount.load(); }
     return mount;

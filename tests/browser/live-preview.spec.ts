@@ -160,9 +160,9 @@ test("real CM6: multiple panes, errors, scroll, rapid replacement and destroy is
   expect(errors).toEqual([]);
 });
 
-test("real CM6: standard source resource guard runs before conversion/network and adjacent text stays editable", async ({ page }) => {
+test("real CM6: standard source resource guard runs before conversion/network and adjacent text stays editable", async ({ page, baseURL }) => {
   const requests: string[] = [];
-  page.on("request", (request) => { if (!request.url().startsWith("http://127.0.0.1:4173/") && !request.url().startsWith("data:")) requests.push(request.url()); });
+  page.on("request", (request) => { if (!request.url().startsWith(`${baseURL}/`) && !request.url().startsWith("data:")) requests.push(request.url()); });
   await boot(page, note('flowchart LR\nA@{ img: "https://example.invalid/image.png" }'));
   await expect(page.locator('[data-state="error"]')).toHaveCount(1);
   await expect(page.locator('[role="alert"]')).toContainText("Resource-capable Mermaid syntax");

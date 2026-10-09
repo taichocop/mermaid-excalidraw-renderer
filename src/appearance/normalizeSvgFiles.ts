@@ -1,3 +1,4 @@
+import { stripInlineColors } from "./svgStyles";
 import { newElementWith } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BinaryFileData, BinaryFiles } from "@excalidraw/excalidraw/types";
@@ -35,15 +36,7 @@ export function normalizeSvgFiles(
       marker *, .state-start, .state-end { fill: ${foreground} !important; stroke: ${foreground} !important; }
     `;
     svg.appendChild(style);
-    // Inline classDef colors otherwise outrank stylesheet rules. Remove only
-    // color declarations, preserving layout, font and all geometry.
-    for (const node of svg.querySelectorAll("[style]")) {
-      if (node instanceof SVGElement || node instanceof HTMLElement) {
-        for (const property of ["fill", "stroke", "color", "background", "background-color"]) {
-          node.style.removeProperty(property);
-        }
-      }
-    }
+    stripInlineColors(svg);
     const serialized = new XMLSerializer().serializeToString(svg);
     const encoded = btoa(Array.from(new TextEncoder().encode(serialized), (byte) => String.fromCharCode(byte)).join(""));
     // addFiles() does not replace existing IDs; use stable appearance-specific

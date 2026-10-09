@@ -24,7 +24,10 @@ class DiagramWidget extends WidgetType {
   eq(other: DiagramWidget): boolean { return this.source === other.source && this.height === other.height; }
   get estimatedHeight(): number { return this.height; }
   toDOM(view: EditorView): HTMLElement {
-    const container = view.dom.ownerDocument.createElement("div");
+    // Obsidian helper on an owner-document fragment keeps CM6 toDOM detached
+    // without touching the editor or live body before its measurement phase.
+    const container = view.dom.ownerDocument.createDocumentFragment().createDiv();
+    container.remove();
     container.className = "mermaid-excalidraw-container mermaid-excalidraw-editor";
     container.setAttribute("aria-label", "Mermaid diagram in Excalidraw view mode");
     container.style.height = `${this.height}px`;

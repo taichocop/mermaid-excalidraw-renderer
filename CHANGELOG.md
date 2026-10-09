@@ -2,12 +2,22 @@
 
 ## [Unreleased]
 
+## [0.1.2]
+
+### Changed
+
+- Restrict both standard `mermaid` and dedicated `mermaid-excalidraw` embedded viewers to pan/zoom: block canvas/native-menu copy, paste/drop, context-menu export and editor/dialog shortcuts before upstream handlers. Host editors outside the viewer keep their normal behavior; desktop mouse/pen navigation remains available, touch interaction is unsupported.
+- Suspend inherited Obsidian shortcuts with a public parentless Scope only while a viewer has focus; restore host shortcuts on focus exit, window deactivation and disposal. This also protects against host keymaps that run before document capture, while retaining Tab and canvas zoom navigation.
+- Use Obsidian owner-document DOM helpers and cross-window SVG checks. Settings now expose all six searchable declarative controls through the existing validation/redraw/save path; remove deprecated slider tooltips.
+- Remove the host dark-canvas `!important` override while preserving monochrome theme contrast.
+- Document the bundle/Sync Standard limitation, retained upstream capabilities and legal/checksum assets. Desktop requirement remains Obsidian **1.14.4+**. Published 0.1.0 and 0.1.1 remain unchanged.
+
 ### Added
 
 - Standard `mermaid` blocks in Live Preview use the existing Excalidraw conversion, strict/resource guards and appearance pipeline when **Render standard mermaid blocks as Excalidraw** is ON. OFF leaves the host editor renderer in control; the saved setting and default ON are unchanged.
 - Public CodeMirror 6 StateField block replacements show source whenever any cursor/selection touches the fence range and suspend during composition. Leaving the block renders the latest source without changing Markdown or Undo history. Source mode is untouched.
 - Shared rendering sessions retain separate MarkdownRenderChild and editor-widget ownership, cancel stale work and dispose React roots. Dedicated `mermaid-excalidraw` keeps its existing host code-block path and remains independent of the standard-block setting.
-- Real CM6 tests cover selection, editing/Undo/Redo, composition events, settings and modes, host widget precedence, native/SVG diagrams, multiple editors, errors and async disposal. Synthetic desktop checks in Obsidian 1.14.4 also confirm Flowchart/Sequence, Class single-SVG fallback, ON/OFF with dedicated blocks independent, source editing/Undo/Redo, Japanese IME, Source/Live Preview transitions, Light/Dark, multiple diagrams/panes, scrolling, resizing and disable/re-enable. Full third-party plugin compatibility and other OS input methods remain unverified; mobile remains untested.
+- Real CM6 tests cover selection, editing/Undo/Redo, composition events, settings and modes, host widget precedence, native/SVG diagrams, multiple editors, errors and async disposal. Synthetic desktop checks in Obsidian 1.14.4 also confirm Flowchart/Sequence, Class single-SVG fallback, ON/OFF with dedicated blocks independent, source editing/Undo/Redo, Japanese IME, Source/Live Preview transitions, Light/Dark, multiple diagrams/panes, scrolling, resizing and disable/re-enable. These native results precede this candidate’s viewer-boundary changes; final-candidate native acceptance remains incomplete. Full third-party plugin compatibility and other OS input methods remain unverified; mobile remains untested.
 
 ## [0.1.1]
 

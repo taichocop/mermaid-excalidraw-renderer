@@ -1,4 +1,7 @@
+import { browserPort } from "./tests/browser/port.mjs";
 import { defineConfig } from "@playwright/test";
+
+const url = `http://127.0.0.1:${browserPort()}`;
 
 export default defineConfig({
   testDir: "tests/browser",
@@ -8,9 +11,9 @@ export default defineConfig({
     browserName: "chromium",
     channel: process.env.PLAYWRIGHT_CHANNEL || "chrome",
     viewport: { width: 1100, height: 900 },
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: url,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  webServer: { command: "npm run test:browser:serve", url: "http://127.0.0.1:4173", reuseExistingServer: false },
+  webServer: { command: "npm run test:browser:serve", url, reuseExistingServer: false },
 });

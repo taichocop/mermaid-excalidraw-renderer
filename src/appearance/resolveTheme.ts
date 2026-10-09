@@ -25,7 +25,9 @@ export function resolveTheme(container: HTMLElement, mode: ThemeMode): ResolvedT
   const theme = mode === "follow-obsidian" ? determineTheme(container.ownerDocument.body.classList) : "light";
   const fallback = theme === "dark" ? "#1e1e1e" : "#ffffff";
   const win = container.ownerDocument.defaultView;
-  const canvas = container.ownerDocument.createElement("canvas");
+  const canvas = container.createEl("canvas");
+  // The helper preserves the owner document; measurement stays detached.
+  canvas.remove();
   canvas.width = canvas.height = 1;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!win || !context) return { theme, background: fallback, foreground: theme === "dark" ? "#ffffff" : "#000000" };
