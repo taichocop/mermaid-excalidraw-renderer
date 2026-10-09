@@ -8,7 +8,7 @@ Write Mermaid text in a normal `mermaid` code block and use **Reading view or Li
 
 ## Features
 
-- Hand-drawn Flowchart and Sequence diagrams, with pan, zoom and automatic fitting.
+- Passive inline Flowchart and Sequence diagrams, with automatic fitting and an enlarged read-only preview for pan/zoom.
 - Class, ER and State diagrams displayed using Mermaid SVG fallback in the current release.
 - SVG fallback for other supported Mermaid types, including Block (`block-beta`), Gantt, Pie and Timeline.
 - Light/Dark theme following, with black or white text and lines chosen for background contrast.
@@ -65,7 +65,11 @@ Dedicated `mermaid-excalidraw` blocks keep Obsidian’s existing code-block widg
 | Live Preview | Excalidraw outside the selection | Host renderer | Existing host code-block widget |
 | Source mode | Editable Markdown | Editable Markdown | Editable Markdown |
 
-Edit the source text to change the diagram. The view supports mouse/pen panning, wheel navigation and zoom controls; the embedded canvas UI blocks editing drawings, clipboard copy/paste, import/save controls, image export and editor dialogs in 0.1.2. Host shortcuts are suspended while the viewer has focus; use Tab or Shift+Tab to return to host controls. Touch interaction is unsupported. Copy the Mermaid source from your note editor when needed.
+Inline diagrams are passive: scroll input over a diagram goes to the note, and dragging does not pan the diagram. Click the diagram to open an enlarged preview, or focus its **Open enlarged Mermaid diagram** button and press **Enter** or **Space**. The standard-block setting must be ON for standard `mermaid` previews; dedicated blocks remain enabled with either setting.
+
+In the enlarged preview, use **Zoom in**, **Zoom out**, **Fit to content** and **Reset zoom** (100%, centered on the content). Drag the canvas with a mouse or pen to pan. Wheel/trackpad navigation is disabled inside the preview so it cannot scroll the note behind it. Press **Esc**, **Close preview**, or the host close button to return to the diagram without changing the note or its scroll position. Focus returns to the diagram button when it still exists. Tab and Shift+Tab keep focus inside the preview. Opening another diagram replaces the existing preview in the activating desktop window. Replacing or editing the source, turning standard rendering OFF, or disabling the plugin closes the affected preview; font-size changes also close it while reconverting.
+
+Edit the source text to change the diagram. Both displays stay read-only: the preview blocks drawing edits, clipboard copy/paste, import/save, export, links and editor dialogs. Host shortcuts are suspended while the enlarged viewer has focus. The inline button leaves normal note shortcuts and clipboard behavior available. Touch canvas interaction is unsupported. Copy the Mermaid source from your note editor when needed.
 
 ### Sequence diagram
 
@@ -149,7 +153,8 @@ Mermaid runs in strict mode with protected security configuration. Inputs are li
 ## Known limitations and troubleshooting
 
 - Live Preview uses a public CM6 StateField with block replacements, separately from Reading view. Closed backtick/tilde `mermaid` fences are recognized through the editor’s syntax tree; unknown/incomplete syntax trees, unclosed fences, extra language parameters and quote/callout prefixes stay on the host path. Nested list/container fences are not verified. Parsing may catch up after scrolling in a large note.
-- Synthetic desktop notes were checked in Obsidian 1.14.4: Flowchart/Sequence native rendering, Class single-SVG fallback, standard ON/OFF with dedicated blocks independent, source editing, Undo/Redo, Japanese IME composition and confirmation, Source/Live Preview transitions, Light/Dark, multiple diagrams, two Live Preview panes, scrolling, resizing and plugin disable/re-enable. Reading view continued rendering in a neighboring pane. This does not establish compatibility with every OS input method or third-party plugin; the 1.14.4+ desktop requirement remains.
+- The final production-bundle browser suite passed **60/60 tests** after a sequential build. Native checks in **Obsidian 1.14.4** verified passive inline note scrolling with trusted wheel input, main-window Modal controls and pan, Esc with focus restoration, Flowchart/Sequence native diagrams and Class/ER/State/Block SVG fallback, Live Preview editing/Undo/Redo and Japanese IME, Source Mode, theme changes, standard OFF with dedicated blocks independent, unload/note-switch cleanup, and native popout Modal owner-document placement and disposal. The maintainer completed native popout Escape focus restoration as human acceptance. These checks do not establish compatibility with every OS input method or third-party plugin; the 1.14.4+ desktop requirement remains.
+- **The maintainer completed physical two-finger hardware trackpad acceptance.** This human acceptance is separate from the earlier horizontal-input checks using trusted events sent through the official Chrome DevTools Protocol (CDP). Trusted CDP horizontal events and browser mocks do not establish physical trackpad gesture behavior.
 - Standard-block rendering uses an ordered Markdown postprocessor and leaves Obsidian’s renderer and other plugins’ registrations intact. Third-party Mermaid plugin compatibility has not been verified in Obsidian; use the OFF setting and dedicated blocks when combining renderers.
 - Mobile has not been tested. The browser-compatible code does not establish mobile compatibility.
 - Class/ER/State fall back to SVG with Mermaid 11.17.2 and converter 2.2.2. This secure dependency combination is preferred over downgrading Mermaid for conversion fidelity.

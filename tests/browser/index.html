@@ -5,6 +5,10 @@
   <title>Mermaid Excalidraw Renderer — browser integration checks</title>
   <link rel="stylesheet" href="/styles.css">
   <style>
+    .modal-container { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; }
+    .modal-bg { position: absolute; inset: 0; background: #0008; }
+    .modal { position: relative; padding: 16px; background: var(--background-primary); border-radius: 8px; }
+    .modal-close-button { float: right; }
     body { font: 16px system-ui; margin: 24px; }
     main { max-width: 900px; margin: auto; }
     .theme-dark { --background-primary: #1e1e1e; --text-normal: #ddd; --text-muted: #aaa; --background-modifier-border: #555; background: #181818; color: #ddd; }

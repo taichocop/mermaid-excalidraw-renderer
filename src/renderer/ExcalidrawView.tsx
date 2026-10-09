@@ -4,9 +4,11 @@ import {
   Excalidraw,
   MainMenu,
   convertToExcalidrawElements,
+  getCommonBounds,
 } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI, Zoom } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { Scope } from "obsidian";
 import type { PluginSettings } from "../types";
 import { applyAppearance } from "../appearance/applyAppearance";
 import { normalizeSvgFiles } from "../appearance/normalizeSvgFiles";
@@ -15,12 +17,21 @@ import { errorMessage, type DiagramData } from "./conversion";
 import { installViewOnlyBoundary, type ViewerKeymap } from "./viewOnlyBoundary";
 import { canvasFitOptions } from "./layout";
 
-interface ViewProps {
+export interface ViewSceneCache {
+  converted?: { data: DiagramData; elements: ExcalidrawElement[] };
+  scene?: { data: DiagramData; appearance: ResolvedTheme; roughness: number; value: ReturnType<typeof normalizeSvgFiles> };
+}
+
+export interface ViewProps {
   data: DiagramData;
   appearance: ResolvedTheme;
   settings: PluginSettings;
   container: HTMLElement;
   keymap: ViewerKeymap;
+  sceneCache: ViewSceneCache;
+  onOpen?: (opener: HTMLButtonElement) => void;
+  onClose?: () => void;
+  modalScope?: Scope;
 }
 
 export function InlineError({ message }: { message: string }) {
@@ -47,11 +58,15 @@ const canvasActions = {
   loadScene: false, saveToActiveFile: false, toggleTheme: false, saveAsImage: false,
 } as const;
 
-export function ExcalidrawView({ data, appearance, settings, container, keymap }: ViewProps) {
-  useLayoutEffect(() => installViewOnlyBoundary(container, keymap), [container, keymap]);
+export function ExcalidrawView({ data, appearance, settings, container, keymap, sceneCache, onOpen, onClose, modalScope }: ViewProps) {
+  const enlarged = !!onClose;
+  useLayoutEffect(() => enlarged
+    ? installViewOnlyBoundary(container, keymap, { onEscape: onClose, blockWheel: true, parentScope: modalScope })
+    : undefined, [container, keymap, enlarged, onClose, modalScope]);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const converted = useRef<{ data: DiagramData; elements: ExcalidrawElement[] } | null>(null);
+  const pointer = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [zoom, setZoom] = useState(1);
   const receiveAPI = useCallback((value: ExcalidrawImperativeAPI) => setApi(value), []);
 
   useEffect(() => {
@@ -69,20 +84,23 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
       try {
         await container.ownerDocument.fonts.load("20px Virgil");
         if (cancelled) return;
-        if (converted.current?.data !== data) {
-          converted.current = { data, elements: convertToExcalidrawElements(data.elements) };
+        if (sceneCache.converted?.data !== data) {
+          sceneCache.converted = { data, elements: convertToExcalidrawElements(data.elements) };
         }
-        const scene = normalizeSvgFiles(
-          applyAppearance(converted.current.elements, settings, appearance),
-          data.files, appearance,
-        );
+        if (sceneCache.scene?.data !== data || sceneCache.scene.appearance !== appearance
+          || sceneCache.scene.roughness !== settings.roughness) {
+          sceneCache.scene = { data, appearance, roughness: settings.roughness, value: normalizeSvgFiles(
+            applyAppearance(sceneCache.converted.elements, settings, appearance), data.files, appearance,
+          ) };
+        }
+        const scene = sceneCache.scene.value;
         let initialized = false;
         let viewportSize = "";
         const fit = () => {
           if (cancelled || !initialized) return;
           const width = container.clientWidth;
           if (width === 0) return; // Wait for a hidden pane to become visible.
-          container.style.height = `${settings.canvasHeight}px`;
+          if (!enlarged) container.style.height = `${settings.canvasHeight}px`;
           if (frame !== undefined) win.cancelAnimationFrame(frame);
           frame = win.requestAnimationFrame(() => {
             if (cancelled) return;
@@ -91,14 +109,14 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
             // dimensions through the public scene API before fitting as well.
             api.refresh();
             const width = container.clientWidth;
-            const height = container.clientHeight;
+            const height = enlarged ? container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!.clientHeight : container.clientHeight;
             const state = api.getAppState();
             if (state.width !== width || state.height !== height) {
               api.updateScene({ appState: { width, height }, captureUpdate: CaptureUpdateAction.NEVER });
             }
             frame = win.requestAnimationFrame(() => {
               if (!cancelled) api.scrollToContent(api.getSceneElements(),
-                canvasFitOptions(container.clientWidth, container.clientHeight, settings.canvasPadding));
+                canvasFitOptions(container.clientWidth, enlarged ? container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!.clientHeight : container.clientHeight, settings.canvasPadding));
             });
           });
         };
@@ -113,7 +131,8 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
             api.addFiles(Object.values(scene.files));
             fit();
           }
-          const { width, height } = api.getAppState();
+          const { width, height, zoom } = api.getAppState();
+          if (enlarged) setZoom(zoom.value);
           const size = `${width}x${height}`;
           if (size !== viewportSize) {
             viewportSize = size;
@@ -124,7 +143,8 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
         // Watch the public state rather than racing its initialization/resize.
         unsubscribe = api.onChange(syncViewport);
         syncViewport();
-        observer = new ResizeObserver(fit);
+        observer = new win.ResizeObserver(fit);
+        if (enlarged) observer.observe(container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!);
         observer.observe(container);
       } catch (error: unknown) {
         if (!cancelled) {
@@ -139,10 +159,46 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
       observer?.disconnect();
       if (frame !== undefined) win.cancelAnimationFrame(frame);
     };
-  }, [api, data, appearance, settings.roughness, settings.canvasHeight, settings.canvasPadding, container, failure]);
+  }, [api, data, appearance, settings.roughness, settings.canvasHeight, settings.canvasPadding, container, failure, enlarged, sceneCache]);
 
   if (failure !== null) return <InlineError message={failure} />;
-  return <Excalidraw
+  const changeZoom = (value: number) => {
+    if (!api) return;
+    const state = api.getAppState();
+    const next = Math.max(0.1, Math.min(30, value)) as Zoom["value"];
+    api.updateScene({ appState: {
+      zoom: { value: next },
+      scrollX: state.scrollX + state.width / (2 * next) - state.width / (2 * state.zoom.value),
+      scrollY: state.scrollY + state.height / (2 * next) - state.height / (2 * state.zoom.value),
+    }, captureUpdate: CaptureUpdateAction.NEVER });
+  };
+  const fit = () => api?.scrollToContent(api.getSceneElements(),
+    canvasFitOptions(api.getAppState().width, api.getAppState().height, settings.canvasPadding));
+  const reset = () => {
+    if (!api) return;
+    const state = api.getAppState();
+    const elements = api.getSceneElements();
+    const [minX, minY, maxX, maxY] = elements.length ? getCommonBounds(elements) : [0, 0, 0, 0] as const;
+    // Commit scale and content center together. A second scrollToContent call
+    // in this React handler can read the old zoom before updateScene commits.
+    api.updateScene({ appState: {
+      zoom: { value: 1 as Zoom["value"] },
+      scrollX: state.width / 2 - (minX + maxX) / 2,
+      scrollY: state.height / 2 - (minY + maxY) / 2,
+    }, captureUpdate: CaptureUpdateAction.NEVER });
+  };
+  return <>
+    {enlarged && <div className="mermaid-excalidraw-controls" role="group" aria-label="Diagram navigation">
+      <button type="button" onClick={() => changeZoom(zoom / 1.2)} disabled={!api} aria-label="Zoom out">−</button>
+      <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
+      <button type="button" onClick={() => changeZoom(zoom * 1.2)} disabled={!api} aria-label="Zoom in">+</button>
+      <button type="button" onClick={fit} disabled={!api}>Fit to content</button>
+      <button type="button" onClick={reset} disabled={!api}>Reset zoom</button>
+      <button type="button" onClick={onClose}>Close preview</button>
+    </div>}
+    <div className={`mermaid-excalidraw-canvas${enlarged ? "" : " mermaid-excalidraw-passive"}`}
+      aria-hidden={enlarged ? undefined : true} ref={node => { if (node) node.inert = !enlarged; }}>
+    <Excalidraw
     excalidrawAPI={receiveAPI}
     theme={appearance.theme}
     viewModeEnabled
@@ -158,5 +214,22 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap }
     UIOptions={{ canvasActions, tools: { image: false } }}
   >
     <MainMenu />
-  </Excalidraw>;
+  </Excalidraw>
+    </div>
+    {!enlarged && <button type="button" className="mermaid-excalidraw-open"
+      aria-label="Open enlarged Mermaid diagram" aria-haspopup="dialog"
+      onPointerDown={event => { pointer.current = { x: event.clientX, y: event.clientY, moved: false }; }}
+      onPointerMove={event => {
+        if (pointer.current && Math.hypot(event.clientX - pointer.current.x, event.clientY - pointer.current.y) > 5) {
+          pointer.current.moved = true;
+        }
+      }}
+      onClick={event => {
+        if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+          && (event.detail === 0 || !pointer.current?.moved)) onOpen?.(event.currentTarget);
+        pointer.current = null;
+      }}>
+      <span>Click to enlarge</span>
+    </button>}
+  </>;
 }

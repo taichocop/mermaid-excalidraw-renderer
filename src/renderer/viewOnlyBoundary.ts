@@ -16,14 +16,16 @@ export function isViewNavigationKey(event: Pick<KeyboardEvent, "key" | "code" | 
   return ["Tab", "Escape", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key);
 }
 
-const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content";
+const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content, .mermaid-excalidraw-controls";
+
+interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean; parentScope?: Scope }
 
 /** A scoped DOM integration boundary, not a patch of upstream internals or
  * host clipboard/network APIs. Capture precedes upstream document copy handlers
  * even when the native Edit menu targets the document rather than the canvas.
  * The disposer must run on unmount so host editors retain their normal behavior.
  */
-export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKeymap): () => void {
+export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKeymap, options: BoundaryOptions = {}): () => void {
   const doc = container.ownerDocument;
   const win = doc.defaultView;
   const inside = (target: EventTarget | null): target is Node => {
@@ -32,10 +34,27 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
       && node.instanceOf(Node) && container.contains(node);
   };
   const focused = () => inside(doc.activeElement);
-  // Host keymaps can run before our document capture. A public parentless
-  // Scope prevents inherited host commands while focus is in this viewer;
-  // navigation still reaches the canvas through the existing DOM allowlist.
-  const scope = new Scope();
+  const cancel = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
+  const allowedKey = (event: KeyboardEvent) => {
+    const navigationControl = inside(event.target) && event.target.instanceOf(Element)
+      && event.target.closest(NAVIGATION_CONTROLS) && ["Enter", " "].includes(event.key)
+      && !event.ctrlKey && !event.metaKey && !event.altKey;
+    return navigationControl || isViewNavigationKey(event);
+  };
+  // Keep the public Modal scope for Tab containment, but shadow inherited app
+  // shortcuts before earlier host capture can run them.
+  const scope = new Scope(options.parentScope);
+  // Keep explicit Escape handling before DOM capture as well.
+  if (options.onEscape) scope.register(null, "Escape", event => {
+    event.preventDefault();
+    options.onEscape?.();
+    return false;
+  });
+  scope.register(null, null, event => {
+    if (event.key === "Tab") return undefined; // Delegate to Modal's public Tab handler.
+    if (!allowedKey(event)) { cancel(event); return false; }
+    return true; // Canvas navigation reaches DOM, not inherited app commands.
+  });
   let scopeActive = false;
   const releaseScope = () => {
     if (scopeActive) { scopeActive = false; keymap.popScope(scope); }
@@ -48,14 +67,14 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   const onFocusOut = (event: FocusEvent) => {
     if (inside(event.target) && !inside(event.relatedTarget)) releaseScope();
   };
-  const cancel = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
   const onClipboard = (event: Event) => {
     if (inside(event.target) || focused()) cancel(event);
   };
   const onKey = (event: KeyboardEvent) => {
-    const navigationControl = inside(event.target) && event.target.instanceOf(Element)
-      && event.target.closest(NAVIGATION_CONTROLS) && event.key === "Enter";
-    if ((inside(event.target) || focused()) && !navigationControl && !isViewNavigationKey(event)) cancel(event);
+    if ((inside(event.target) || focused()) && event.key === "Escape" && options.onEscape) {
+      cancel(event); options.onEscape(); return;
+    }
+    if ((inside(event.target) || focused()) && !allowedKey(event)) cancel(event);
   };
   const onBlocked = (event: Event) => { if (inside(event.target)) cancel(event); };
   const onInteraction = (event: Event) => {
@@ -66,6 +85,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     // contextmenu event). Touch editing is outside desktop support.
     const target = event.target;
     if (!target.instanceOf(Element)) return;
+    if (target.closest(".mermaid-excalidraw-controls")) return;
     if (event.type === "pointerdown" && (event as PointerEvent).pointerType === "touch") { cancel(event); return; }
     if (!target.matches("canvas") && !target.closest(NAVIGATION_CONTROLS)) cancel(event);
   };
@@ -75,6 +95,12 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     ...["contextmenu", "dragstart", "dragenter", "dragover", "drop"].map(type => [type, onBlocked] as [string, EventListener]),
     ["pointerdown", onInteraction], ["click", onInteraction], ["dblclick", onBlocked],
   ];
+  const onWheel = (event: WheelEvent) => {
+    // Enlarged preview uses explicit zoom buttons and drag pan. Prevent wheel
+    // scroll chaining into the note only inside this modal, never inline.
+    if (options.blockWheel && inside(event.target)) cancel(event);
+  };
+  if (options.blockWheel) container.addEventListener("wheel", onWheel, { capture: true, passive: false });
   const capture = { capture: true };
   for (const [type, handler] of listeners) doc.addEventListener(type, handler, capture);
   doc.addEventListener("focusin", syncScope, capture);
@@ -85,6 +111,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   syncScope();
   return () => {
     releaseScope();
+    if (options.blockWheel) container.removeEventListener("wheel", onWheel, true);
     doc.removeEventListener("focusin", syncScope, capture);
     doc.removeEventListener("focusout", onFocusOut, capture);
     win?.removeEventListener("focus", syncScope);

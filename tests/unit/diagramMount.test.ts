@@ -60,3 +60,29 @@ it("passes errors as React text props and keeps adjacent sessions independent", 
   expect(good.containerEl.dataset.state).toBe("ready");
   bad.dispose(); good.dispose();
 });
+
+it("refreshes the owned preview with shared data/cache and closes before reconversion or disposal", async () => {
+  const converter = new MermaidConverter();
+  const data: DiagramData = { elements: [] };
+  vi.spyOn(converter, "convert").mockResolvedValue({ status: "success", data });
+  const preview = { open: vi.fn(), refresh: vi.fn(), close: vi.fn() };
+  const mount = new DiagramMount({ style: {}, dataset: {} } as HTMLElement, "fixture", DEFAULT_SETTINGS,
+    { theme: "light", background: "white", foreground: "#000000" }, converter, vi.fn(),
+    { pushScope() {}, popScope() {} }, preview);
+  mount.load(); await Promise.resolve();
+  const first = mount.viewProps!;
+  expect(first.data).toBe(data);
+  expect(preview.refresh).toHaveBeenCalledWith(mount);
+  mount.updateTheme({ theme: "dark", background: "black", foreground: "#ffffff" });
+  expect(mount.viewProps!.data).toBe(data);
+  expect(mount.viewProps!.sceneCache).toBe(first.sceneCache);
+  preview.close.mockClear();
+  mount.updateSettings({ ...DEFAULT_SETTINGS, fontSize: 28 });
+  expect(preview.close).toHaveBeenCalledExactlyOnceWith(mount);
+  expect(mount.viewProps).toBeNull();
+  await Promise.resolve();
+  preview.close.mockClear();
+  mount.dispose();
+  expect(preview.close).toHaveBeenCalledExactlyOnceWith(mount);
+  expect(mount.viewProps).toBeNull();
+});
