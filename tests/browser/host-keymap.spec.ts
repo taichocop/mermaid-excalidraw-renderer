@@ -38,9 +38,9 @@ for (const phase of ["window", "document"] as const) {
         }
         const reset = viewer.getByRole("button", { name: "Reset zoom", exact: true });
         const zoom = await reset.textContent();
-        await wrapper.evaluate(node => node.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "=", code: "Equal", metaKey: true, bubbles: true, cancelable: true,
-        })));
+        // Upstream CTRL_OR_CMD is Meta on macOS, Control on Linux/Windows.
+        // Use real keyboard input and retain the actual zoom-change assertion.
+        await page.keyboard.press("ControlOrMeta+=");
         await expect(reset).not.toHaveText(zoom!);
         await expect(page.locator(".prompt-input, .modal-container, [role=dialog]")).toHaveCount(0);
       }
