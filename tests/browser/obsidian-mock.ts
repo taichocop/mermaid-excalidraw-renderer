@@ -93,7 +93,11 @@ export class MarkdownView {
 // Public parent-scope/stack model only; the real host's event order is supplied
 // separately by the regression fixture, before any viewer is mounted.
 export class Scope {
+  readonly handlers: { key: string | null; callback: (event: KeyboardEvent) => boolean | void }[] = [];
   constructor(readonly parent?: Scope) {}
+  register(_modifiers: unknown, key: string | null, callback: (event: KeyboardEvent) => boolean | void) {
+    const handler = { key, callback }; this.handlers.push(handler); return handler;
+  }
 }
 export class Keymap {
   readonly scopes: Scope[] = [];
@@ -108,6 +112,65 @@ export class Keymap {
     }
     return false;
   }
+}
+
+/** Public Modal fixture only: native focus trapping/window selection still needs
+ * desktop acceptance. The scope dispatch runs before viewer DOM capture. */
+export class Modal {
+  scope = new Scope();
+  containerEl: HTMLElement;
+  modalEl: HTMLElement;
+  titleEl: HTMLElement;
+  contentEl: HTMLElement;
+  private opened = false;
+  private previous: HTMLElement | null = null;
+  private readonly onKey = (event: KeyboardEvent) => {
+    const scope = this.app.keymap.scopes.at(-1);
+    const handler = scope?.handlers.find(handler => handler.key === event.key);
+    if (handler) {
+      if (handler.callback(event) === false) { event.preventDefault(); event.stopImmediatePropagation(); }
+    } else if (event.key === "Escape" && scope === this.scope) {
+      event.preventDefault(); event.stopImmediatePropagation(); this.close();
+    }
+  };
+  constructor(private readonly app: Plugin["app"]) {
+    const focused = document.activeElement;
+    const doc = focused?.tagName === "IFRAME" ? (focused as HTMLIFrameElement).contentDocument! : document;
+    this.containerEl = doc.createElement("div"); this.containerEl.className = "modal-container";
+    const backdrop = doc.createElement("div"); backdrop.className = "modal-bg";
+    backdrop.onclick = () => this.close();
+    this.modalEl = doc.createElement("div"); this.modalEl.className = "modal";
+    this.modalEl.setAttribute("role", "dialog"); this.modalEl.setAttribute("aria-modal", "true");
+    this.titleEl = doc.createElement("h2"); this.titleEl.className = "modal-title";
+    this.contentEl = doc.createElement("div"); this.contentEl.className = "modal-content";
+    const close = doc.createElement("button"); close.textContent = "Close"; close.className = "modal-close-button";
+    close.setAttribute("aria-label", "Close dialog"); close.onclick = () => this.close();
+    this.modalEl.append(close, this.titleEl, this.contentEl);
+    this.containerEl.append(backdrop, this.modalEl);
+    this.scope.register(null, "Escape", () => { this.close(); return false; });
+  }
+  setTitle(title: string) { this.titleEl.textContent = title; return this; }
+  open() {
+    if (this.opened) return;
+    this.opened = true;
+    const doc = this.containerEl.ownerDocument;
+    this.previous = doc.activeElement as HTMLElement;
+    doc.body.append(this.containerEl);
+    this.app.keymap.pushScope(this.scope);
+    doc.defaultView?.addEventListener("keydown", this.onKey, true);
+    this.onOpen();
+  }
+  close() {
+    if (!this.opened) return;
+    this.opened = false;
+    this.containerEl.ownerDocument.defaultView?.removeEventListener("keydown", this.onKey, true);
+    this.app.keymap.popScope(this.scope);
+    this.containerEl.remove();
+    if (this.previous?.isConnected) this.previous.focus({ preventScroll: true });
+    this.onClose();
+  }
+  onOpen() {}
+  onClose() {}
 }
 
 export class Plugin {

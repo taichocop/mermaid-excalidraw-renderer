@@ -1,10 +1,10 @@
-import type { MarkdownPostProcessorContext } from "obsidian";
+import type { App, MarkdownPostProcessorContext } from "obsidian";
 import type { PluginSettings } from "../types";
 import { MermaidConverter } from "./conversion";
 import { ExcalidrawRenderChild } from "./ExcalidrawRenderChild";
 import { DiagramMount } from "./DiagramMount";
 import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
-import type { ViewerKeymap } from "./viewOnlyBoundary";
+import { DiagramPreviewModal } from "./DiagramPreviewModal";
 
 /** Independent of the registered block name so future integrations can reuse it. */
 export class MermaidExcalidrawRenderer {
@@ -13,8 +13,9 @@ export class MermaidExcalidrawRenderer {
   private readonly mounts = new Set<DiagramMount>();
   private readonly standardChildren = new Set<ExcalidrawRenderChild>();
   private disposed = false;
+  private preview: DiagramPreviewModal | null = null;
 
-  constructor(private settings: PluginSettings, private readonly keymap: ViewerKeymap) {}
+  constructor(private settings: PluginSettings, private readonly app: App) {}
 
   render(source: string, element: HTMLElement, context: MarkdownPostProcessorContext, standard = false): void {
     if (this.disposed) return;
@@ -37,7 +38,19 @@ export class MermaidExcalidrawRenderer {
 
   createMount(source: string, container: HTMLElement, appearance?: ResolvedTheme): DiagramMount {
     const mount = new DiagramMount(container, source, { ...this.settings },
-      appearance ?? resolveTheme(container, this.settings.themeMode), this.converter, () => this.mounts.delete(mount), this.keymap);
+      appearance ?? resolveTheme(container, this.settings.themeMode), this.converter, () => this.mounts.delete(mount), this.app.keymap, {
+        open: (mount, opener) => {
+          if (this.disposed || !mount.data || this.preview?.mount === mount) return;
+          this.preview?.close();
+          const modal = new DiagramPreviewModal(this.app, mount, opener, () => {
+            if (this.preview === modal) this.preview = null;
+          });
+          this.preview = modal;
+          modal.open();
+        },
+        refresh: mount => { if (this.preview?.mount === mount) this.preview.refresh(); },
+        close: mount => { if (this.preview?.mount === mount) this.preview.close(); },
+      });
     if (this.disposed) mount.dispose();
     else { this.mounts.add(mount); mount.load(); }
     return mount;
@@ -56,6 +69,7 @@ export class MermaidExcalidrawRenderer {
 
   dispose(): void {
     this.disposed = true;
+    this.preview?.close();
     for (const child of [...this.children]) child.unload();
     this.children.clear();
     for (const mount of [...this.mounts]) mount.dispose();

@@ -38,7 +38,11 @@ test("view-only blocks copy/export, dialogs, storage and file/network actions wh
     return canvas.width > 0 && canvas.height > 0 && canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data
       .some((value, i) => i % 4 === 0 && value < 200);
   }))).toBe(true);
-  for (const canvas of await page.locator("canvas.interactive").all()) {
+  for (const opener of await page.getByRole("button", { name: "Open enlarged Mermaid diagram" }).all()) {
+    if (await page.getByRole("dialog").count()) await page.getByRole("button", { name: "Close preview" }).click();
+    await opener.click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    const canvas = page.getByRole("dialog").locator("canvas.interactive");
     await canvas.click();
     const events = await canvas.evaluate(node => {
       const dt = new DataTransfer();
@@ -65,20 +69,20 @@ test("view-only blocks copy/export, dialogs, storage and file/network actions wh
     await expect(page.locator(".context-menu")).toHaveCount(0);
     for (const shortcut of ["Control+Shift+E", "Meta+Shift+E", "Shift+Alt+c", "Control+/", "Control+Shift+p", "?", "Control+o", "Control+s", "Control+v"]) {
       await page.keyboard.press(shortcut);
-      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByRole("dialog")).toHaveCount(1);
     }
     // Navigation still reaches the actual upstream canvas.
   }
-  const viewer = page.locator(".mermaid-excalidraw-container").first();
+  const viewer = page.locator(".mermaid-excalidraw-enlarged");
   const zoomIn = viewer.getByRole("button", { name: "Zoom in", exact: true });
-  const reset = viewer.getByRole("button", { name: "Reset zoom", exact: true });
+  const reset = viewer.getByLabel("Zoom level");
   const zoomBefore = await reset.textContent();
   await zoomIn.click();
   await expect(reset).not.toHaveText(zoomBefore!);
   const keyboardBefore = await reset.textContent();
   await zoomIn.focus(); await page.keyboard.press("Enter");
   await expect(reset).not.toHaveText(keyboardBefore!);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   const canvas = viewer.locator("canvas.interactive");
   await canvas.click();
   for (const code of ["Equal", "NumpadAdd", "Minus", "NumpadSubtract"]) {
@@ -117,21 +121,11 @@ test("view-only blocks copy/export, dialogs, storage and file/network actions wh
   await expect.poll(pixels).not.toBe(panBefore);
   const wheelBefore = await pixels();
   await page.mouse.wheel(0, -200);
-  await expect.poll(pixels).not.toBe(wheelBefore);
-  // Pan the real viewport until the scene is offscreen, then recover through
-  // both pointer and keyboard activation of the pinned navigation control.
-  const back = viewer.locator(".scroll-back-to-content");
-  for (const activation of ["pointer", "keyboard"]) {
-    await canvas.hover({ position: { x: 100, y: 100 } });
-    // Real wheel panning, no private Excalidraw state API or alternate renderer.
-    await page.mouse.wheel(10_000, 10_000);
-    await expect(back).toBeVisible();
-    const offscreen = await pixels();
-    if (activation === "pointer") await back.click();
-    else { await back.focus(); await page.keyboard.press("Enter"); }
-    await expect(back).toHaveCount(0);
-    await expect.poll(pixels).not.toBe(offscreen);
-  }
+  await page.waitForTimeout(200);
+  expect(await pixels()).toBe(wheelBefore);
+  await viewer.getByRole("button", { name: "Fit to content" }).click();
+  await viewer.getByRole("button", { name: "Close preview" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   // Outside the viewer, clipboard event propagation/default behavior survives.
   const outside = await page.evaluate(() => {
     const input = document.createElement("textarea"); document.body.append(input); input.focus();
@@ -192,7 +186,9 @@ test("Live Preview shares the viewer boundary while CM6 source editing and dispo
   const editor = page.locator("#boundary-editor");
   await expect(editor.locator('[data-state="ready"]')).toHaveCount(1);
   const before = await page.evaluate(() => window.harness.editors.snapshot("boundary-editor"));
-  const canvas = editor.locator("canvas.interactive");
+  await editor.getByRole("button", { name: "Open enlarged Mermaid diagram" }).click();
+  const modal = page.getByRole("dialog");
+  const canvas = modal.locator("canvas.interactive");
   await canvas.click();
   const blocked = await canvas.evaluate(node => {
     const data = new DataTransfer(); data.setData("text/plain", "Disposable");
@@ -203,12 +199,13 @@ test("Live Preview shares the viewer boundary while CM6 source editing and dispo
   expect(blocked).toBe(true);
   await canvas.click({ button: "right" });
   await expect(page.locator(".context-menu")).toHaveCount(0);
-  await page.keyboard.press("?"); await expect(page.getByRole("dialog")).toHaveCount(0);
-  const reset = editor.getByRole("button", { name: "Reset zoom", exact: true });
+  await page.keyboard.press("?"); await expect(page.getByRole("dialog")).toHaveCount(1);
+  const reset = modal.getByLabel("Zoom level");
   const zoom = await reset.textContent();
-  await editor.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await modal.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect(reset).not.toHaveText(zoom!);
   expect(await page.evaluate(() => window.harness.editors.snapshot("boundary-editor"))).toEqual(before);
+  await modal.getByRole("button", { name: "Close preview" }).click();
   await page.evaluate(() => {
     const h = window.harness.editors; h.select("boundary-editor", [[0, 0]]);
     h.view("boundary-editor").focus();

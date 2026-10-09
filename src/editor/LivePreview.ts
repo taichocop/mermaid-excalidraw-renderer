@@ -53,7 +53,8 @@ class DiagramWidget extends WidgetType {
     if (ownership) { ownership.disposed = true; ownership.mount?.dispose(); }
     widgetMounts.delete(container);
   }
-  // Pan/zoom belong to the view-only canvas; the editor owns source editing.
+  // The passive diagram button opens a Modal without moving the CM6 cursor.
+  // The editor still owns source editing and wheel scrolling.
   ignoreEvent(): boolean { return true; }
 }
 

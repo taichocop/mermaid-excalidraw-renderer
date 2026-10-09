@@ -16,14 +16,16 @@ export function isViewNavigationKey(event: Pick<KeyboardEvent, "key" | "code" | 
   return ["Tab", "Escape", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key);
 }
 
-const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content";
+const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content, .mermaid-excalidraw-controls";
+
+interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean }
 
 /** A scoped DOM integration boundary, not a patch of upstream internals or
  * host clipboard/network APIs. Capture precedes upstream document copy handlers
  * even when the native Edit menu targets the document rather than the canvas.
  * The disposer must run on unmount so host editors retain their normal behavior.
  */
-export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKeymap): () => void {
+export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKeymap, options: BoundaryOptions = {}): () => void {
   const doc = container.ownerDocument;
   const win = doc.defaultView;
   const inside = (target: EventTarget | null): target is Node => {
@@ -36,6 +38,13 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   // Scope prevents inherited host commands while focus is in this viewer;
   // navigation still reaches the canvas through the existing DOM allowlist.
   const scope = new Scope();
+  // This parentless scope sits above Modal.scope. Register Escape here too:
+  // native host keymaps may consume it before DOM capture reaches the Modal.
+  if (options.onEscape) scope.register(null, "Escape", event => {
+    event.preventDefault();
+    options.onEscape?.();
+    return false;
+  });
   let scopeActive = false;
   const releaseScope = () => {
     if (scopeActive) { scopeActive = false; keymap.popScope(scope); }
@@ -53,8 +62,11 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     if (inside(event.target) || focused()) cancel(event);
   };
   const onKey = (event: KeyboardEvent) => {
+    if ((inside(event.target) || focused()) && event.key === "Escape" && options.onEscape) {
+      cancel(event); options.onEscape(); return;
+    }
     const navigationControl = inside(event.target) && event.target.instanceOf(Element)
-      && event.target.closest(NAVIGATION_CONTROLS) && event.key === "Enter";
+      && event.target.closest(NAVIGATION_CONTROLS) && ["Enter", " "].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey;
     if ((inside(event.target) || focused()) && !navigationControl && !isViewNavigationKey(event)) cancel(event);
   };
   const onBlocked = (event: Event) => { if (inside(event.target)) cancel(event); };
@@ -66,6 +78,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     // contextmenu event). Touch editing is outside desktop support.
     const target = event.target;
     if (!target.instanceOf(Element)) return;
+    if (target.closest(".mermaid-excalidraw-controls")) return;
     if (event.type === "pointerdown" && (event as PointerEvent).pointerType === "touch") { cancel(event); return; }
     if (!target.matches("canvas") && !target.closest(NAVIGATION_CONTROLS)) cancel(event);
   };
@@ -75,6 +88,12 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     ...["contextmenu", "dragstart", "dragenter", "dragover", "drop"].map(type => [type, onBlocked] as [string, EventListener]),
     ["pointerdown", onInteraction], ["click", onInteraction], ["dblclick", onBlocked],
   ];
+  const onWheel = (event: WheelEvent) => {
+    // Enlarged preview uses explicit zoom buttons and drag pan. Prevent wheel
+    // scroll chaining into the note only inside this modal, never inline.
+    if (options.blockWheel && inside(event.target)) cancel(event);
+  };
+  if (options.blockWheel) container.addEventListener("wheel", onWheel, { capture: true, passive: false });
   const capture = { capture: true };
   for (const [type, handler] of listeners) doc.addEventListener(type, handler, capture);
   doc.addEventListener("focusin", syncScope, capture);
@@ -85,6 +104,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   syncScope();
   return () => {
     releaseScope();
+    if (options.blockWheel) container.removeEventListener("wheel", onWheel, true);
     doc.removeEventListener("focusin", syncScope, capture);
     doc.removeEventListener("focusout", onFocusOut, capture);
     win?.removeEventListener("focus", syncScope);

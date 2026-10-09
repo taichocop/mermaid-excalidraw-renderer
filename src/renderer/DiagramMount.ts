@@ -3,8 +3,14 @@ import { createRoot, type Root } from "react-dom/client";
 import type { PluginSettings } from "../types";
 import { resolveTheme, type ResolvedTheme } from "../appearance/resolveTheme";
 import { type DiagramData, MermaidConverter } from "./conversion";
-import { DiagramErrorBoundary, ExcalidrawView, InlineError } from "./ExcalidrawView";
+import { DiagramErrorBoundary, ExcalidrawView, InlineError, type ViewProps, type ViewSceneCache } from "./ExcalidrawView";
 import type { ViewerKeymap } from "./viewOnlyBoundary";
+
+export interface PreviewHost {
+  open(mount: DiagramMount, opener: HTMLButtonElement): void;
+  refresh(mount: DiagramMount): void;
+  close(mount: DiagramMount): void;
+}
 
 /** A rendering session owned by either a Markdown child or an editor widget. */
 export class DiagramMount {
@@ -14,6 +20,7 @@ export class DiagramMount {
   data: DiagramData | null = null;
   private message: string | null = null;
   private disposed = false;
+  private readonly sceneCache: ViewSceneCache = {};
 
   constructor(
     readonly containerEl: HTMLElement,
@@ -23,7 +30,15 @@ export class DiagramMount {
     private readonly converter: MermaidConverter,
     private readonly onDispose: () => void,
     private readonly keymap: ViewerKeymap,
+    private readonly previewHost?: PreviewHost,
   ) {}
+
+  get viewProps(): ViewProps | null {
+    return this.data && !this.disposed ? {
+      data: this.data, appearance: this.appearance, settings: this.settings,
+      container: this.containerEl, keymap: this.keymap, sceneCache: this.sceneCache,
+    } : null;
+  }
 
   load(): void {
     if (this.disposed || this.root) return;
@@ -49,6 +64,9 @@ export class DiagramMount {
 
   private startConversion(): void {
     if (this.disposed || !this.root) return;
+    this.previewHost?.close(this);
+    this.sceneCache.converted = undefined;
+    this.sceneCache.scene = undefined;
     this.controller?.abort();
     const controller = new AbortController();
     this.controller = controller;
@@ -77,23 +95,26 @@ export class DiagramMount {
       ? createElement(InlineError, { message: this.message })
       : this.data
         ? createElement(ExcalidrawView, {
-          data: this.data, appearance: this.appearance, settings: this.settings,
-          container: this.containerEl,
-          keymap: this.keymap,
+          ...this.viewProps!,
+          onOpen: (opener: HTMLButtonElement) => this.previewHost?.open(this, opener),
         })
         : createElement("div", { className: "mermaid-excalidraw-loading", role: "status" }, "Rendering diagram…");
     this.root.render(createElement(DiagramErrorBoundary, { key: this.generation, children: content }));
+    this.previewHost?.refresh(this);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.previewHost?.close(this);
     this.generation++;
     this.controller?.abort();
     this.controller = null;
     this.root?.unmount();
     this.root = null;
     this.data = null;
+    this.sceneCache.converted = undefined;
+    this.sceneCache.scene = undefined;
     this.onDispose();
   }
 }

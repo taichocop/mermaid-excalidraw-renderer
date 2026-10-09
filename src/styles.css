@@ -46,3 +46,81 @@
   margin-block: 0;
   box-sizing: border-box;
 }
+
+.mermaid-excalidraw-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+/* Inline hit testing never reaches Excalidraw wheel/drag handlers. No wheel
+   listener or preventDefault is installed on the note preview. */
+.mermaid-excalidraw-passive {
+  pointer-events: none;
+}
+.mermaid-excalidraw-container .excalidraw .zoom-actions,
+.mermaid-excalidraw-container .excalidraw .scroll-back-to-content {
+  display: none;
+}
+.mermaid-excalidraw-open {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  cursor: zoom-in;
+  color: var(--text-muted, #666);
+  touch-action: pan-x pan-y;
+}
+.mermaid-excalidraw-open:hover {
+  background: transparent;
+  box-shadow: none;
+}
+.mermaid-excalidraw-open:focus-visible {
+  outline: 2px solid var(--interactive-accent, #6366f1);
+  outline-offset: -3px;
+}
+.mermaid-excalidraw-open span {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  width: 100%;
+  font-size: 0.8em;
+  pointer-events: none;
+}
+.mermaid-excalidraw-modal {
+  width: min(1100px, 92vw);
+  max-width: 92vw;
+}
+.mermaid-excalidraw-modal .modal-content {
+  overflow: hidden;
+}
+.mermaid-excalidraw-enlarged {
+  display: flex;
+  flex-direction: column;
+  height: min(720px, 75vh);
+  min-height: 240px;
+  margin: 0;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.mermaid-excalidraw-enlarged .mermaid-excalidraw-canvas {
+  flex: 1;
+  height: auto;
+  overflow: hidden;
+}
+.mermaid-excalidraw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--text-normal, #333);
+}
+.mermaid-excalidraw-controls output {
+  min-width: 4ch;
+  text-align: center;
+}

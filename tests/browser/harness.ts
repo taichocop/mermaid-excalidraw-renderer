@@ -76,6 +76,25 @@ const harness = {
   mountSamples(names: (keyof typeof samples)[], language = "mermaid-excalidraw") {
     names.forEach((name) => harness.mount(samples[name], language));
   },
+  mountInFrame(source: string) {
+    const frame = document.createElement("iframe"); frame.id = "popout-fixture";
+    frame.style.width = "1000px"; frame.style.height = "800px";
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    doc.head.innerHTML = document.head.innerHTML;
+    doc.body.className = "theme-light";
+    const foreign = frame.contentWindow!;
+    const ForeignNode = Reflect.get(foreign, "Node") as typeof Node;
+    ForeignNode.prototype.createEl = Node.prototype.createEl;
+    ForeignNode.prototype.createDiv = Node.prototype.createDiv;
+    ForeignNode.prototype.instanceOf = Node.prototype.instanceOf;
+    const section = doc.createElement("section"), pre = doc.createElement("pre"), code = doc.createElement("code");
+    code.className = "language-mermaid-excalidraw"; code.textContent = source;
+    pre.append(code); section.append(pre); doc.body.append(section);
+    mock.MarkdownPreviewRenderer.process(section, { addChild(child) {
+      children.add(child); child.register(() => children.delete(child)); child.load();
+    } });
+  },
   rerender() { previewInvalidated = false; clearRendered(); blocks.forEach(renderBlock); },
   clear() { blocks.length = 0; clearRendered(); },
   disable() { plugin.unload(); },
