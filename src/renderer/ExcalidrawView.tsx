@@ -4,6 +4,7 @@ import {
   Excalidraw,
   MainMenu,
   convertToExcalidrawElements,
+  getCommonBounds,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI, Zoom } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -172,8 +173,17 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
   const fit = () => api?.scrollToContent(api.getSceneElements(),
     canvasFitOptions(api.getAppState().width, api.getAppState().height, settings.canvasPadding));
   const reset = () => {
-    changeZoom(1);
-    api?.scrollToContent(api.getSceneElements(), { animate: false });
+    if (!api) return;
+    const state = api.getAppState();
+    const elements = api.getSceneElements();
+    const [minX, minY, maxX, maxY] = elements.length ? getCommonBounds(elements) : [0, 0, 0, 0] as const;
+    // Commit scale and content center together. A second scrollToContent call
+    // in this React handler can read the old zoom before updateScene commits.
+    api.updateScene({ appState: {
+      zoom: { value: 1 as Zoom["value"] },
+      scrollX: state.width / 2 - (minX + maxX) / 2,
+      scrollY: state.height / 2 - (minY + maxY) / 2,
+    }, captureUpdate: CaptureUpdateAction.NEVER });
   };
   return <>
     {enlarged && <div className="mermaid-excalidraw-controls" role="group" aria-label="Diagram navigation">

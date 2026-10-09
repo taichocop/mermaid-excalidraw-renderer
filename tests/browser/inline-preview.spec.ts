@@ -118,6 +118,55 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
   }
 }
 
+// Exercise the bundled React button handler from committed non-100% states.
+// Returning to the initial zoom before Reset can hide a queued-update race.
+for (const source of [
+  "flowchart LR\nA[Reset] --> B[Centered]",
+  "classDiagram\nclass Reset {\n +String centered\n}",
+]) {
+  test(`Reset zoom commits centered 100% from below and above 100%: ${source.split("\n")[0]}`, async ({ page }, testInfo) => {
+    await page.goto("/"); await page.evaluate(() => window.ready);
+    await page.evaluate(source => window.harness.mount(source), source);
+    const inline = page.locator(".mermaid-excalidraw-container").first();
+    await expect(inline).toHaveAttribute("data-state", "ready");
+    await inline.getByRole("button", { name: "Open enlarged Mermaid diagram" }).click();
+    const modal = page.getByRole("dialog");
+    const viewer = modal.locator(".mermaid-excalidraw-enlarged");
+    const level = modal.getByLabel("Zoom level");
+    const reset = modal.getByRole("button", { name: "Reset zoom", exact: true });
+    await expectInk(viewer);
+    await expect(level).toHaveText("100%"); // Small fixtures fit without scaling.
+    await page.waitForTimeout(700); // Let initial resize/fit finish before sampling.
+    await reset.click();
+    await expect(level).toHaveText("100%");
+    await page.waitForTimeout(200);
+    const centered = await pixels(viewer);
+    const evidence: { beforeReset: string | null; afterReset: string | null; centeredPixels: number }[] = [];
+    for (const [direction, expected, activation] of [
+      ["Zoom out", "83%", "pointer"], ["Zoom in", "120%", "keyboard"],
+    ] as const) {
+      await modal.getByRole("button", { name: direction, exact: true }).click();
+      await expect(level).toHaveText(expected);
+      const canvas = viewer.locator("canvas.interactive");
+      const box = (await canvas.boundingBox())!;
+      await page.mouse.move(box.x + 150, box.y + 100); await page.mouse.down();
+      await page.mouse.move(box.x + 250, box.y + 160, { steps: 8 }); await page.mouse.up();
+      await expect.poll(() => pixels(viewer)).not.toBe(centered);
+      const beforeReset = await level.textContent();
+      expect(beforeReset).not.toBe("100%");
+      if (activation === "pointer") await reset.click();
+      else { await reset.focus(); await page.keyboard.press("Space"); }
+      await expect(level).toHaveText("100%");
+      // Same original scene pixels require restoration of center as well as scale.
+      await expect.poll(() => pixels(viewer)).toBe(centered);
+      evidence.push({ beforeReset, afterReset: await level.textContent(), centeredPixels: await pixels(viewer) });
+    }
+    await testInfo.attach("reset-from-non-100-zoom", { body: JSON.stringify(evidence), contentType: "application/json" });
+    await page.keyboard.press("Escape");
+    await expect(modal).toHaveCount(0);
+  });
+}
+
 test("passive drag/trackpad-like events preserve scene and note input; modal wheel cannot scroll the note", async ({ page }) => {
   await page.goto("/"); await page.evaluate(() => window.ready);
   await page.evaluate(() => window.harness.mountSamples(["flowchart", "sequence"]));
