@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { expectBoundedInk, expectNoMenuChrome } from "./chrome-assertions";
 
 async function pixels(viewer: Locator) {
   return viewer.locator("canvas.static").evaluate(node => {
@@ -68,6 +69,8 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
       await expect(inline).toHaveAttribute("data-state", "ready");
       await expect(inline.locator(".mermaid-excalidraw-passive")).toHaveAttribute("inert", "");
       await expect(inline.getByRole("button", { name: "Zoom in" })).toHaveCount(0);
+      await expectBoundedInk(inline);
+      await expectNoMenuChrome(inline);
       await page.waitForTimeout(700);
       const before = await pixels(inline);
       const sources = await page.evaluate(() => window.harness.hostState().blocks);
@@ -77,6 +80,8 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
       await expect(modal).toHaveCount(1);
       const viewer = modal.locator(".mermaid-excalidraw-enlarged");
       await expectInk(viewer);
+      await expectBoundedInk(viewer);
+      await expectNoMenuChrome(viewer);
       await page.waitForTimeout(700);
       const level = modal.getByLabel("Zoom level");
       const initial = await level.textContent();
@@ -103,10 +108,16 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
           const c = node as HTMLCanvasElement;
           return [...c.getContext("2d")!.getImageData(0, 0, 1, 1).data].slice(0, 3);
         })).toEqual(dark ? [30, 30, 30] : [255, 255, 255]);
+        await expectBoundedInk(viewer);
+        await expectNoMenuChrome(viewer);
       }
-      await page.setViewportSize({ width: 800, height: 700 });
+      await page.setViewportSize({ width: 600, height: 500 });
       await expect(viewer).toBeVisible();
+      await expectBoundedInk(viewer);
+      await expectNoMenuChrome(viewer);
       await page.setViewportSize({ width: 1100, height: 900 });
+      await expectBoundedInk(viewer);
+      await expectNoMenuChrome(viewer);
       await modal.getByRole("button", { name: "Close preview" }).focus();
       await page.keyboard.press("Space");
       await expect(modal).toHaveCount(0);
@@ -117,6 +128,31 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
     });
   }
 }
+
+test("enlarged viewer retains pen pan with menu chrome hidden", async ({ page }) => {
+  await page.goto("/"); await page.evaluate(() => window.ready);
+  await page.evaluate(() => window.harness.mount("flowchart LR\nA[Pen] --> B[Navigation]"));
+  await page.getByRole("button", { name: "Open enlarged Mermaid diagram" }).click();
+  const viewer = page.locator(".mermaid-excalidraw-enlarged");
+  await expectBoundedInk(viewer); await expectNoMenuChrome(viewer);
+  await page.waitForTimeout(700);
+  const before = await pixels(viewer), box = (await viewer.locator("canvas.interactive").boundingBox())!;
+  // Trusted CDP pen events verify this boundary path, not physical hardware.
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x + 150, y: box.y + 100,
+      button: "left", buttons: 1, clickCount: 1, pointerType: "pen" });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + 250, y: box.y + 160,
+      button: "left", buttons: 1, pointerType: "pen" });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x + 250, y: box.y + 160,
+      button: "left", buttons: 0, clickCount: 1, pointerType: "pen" });
+    await expect.poll(() => pixels(viewer)).not.toBe(before);
+  } finally { await cdp.detach(); }
+  await page.getByRole("button", { name: "Fit to content", exact: true }).click();
+  await expectBoundedInk(viewer); await expectNoMenuChrome(viewer);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Open enlarged Mermaid diagram" })).toBeFocused();
+});
 
 // Exercise the bundled React button handler from committed non-100% states.
 // Returning to the initial zoom before Reset can hide a queued-update race.

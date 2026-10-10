@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectNoMenuChrome } from "./chrome-assertions";
 
 // Same-origin frames model independent owner documents without native Vaults.
 // The host fixture restores saved window/focus after onClose and puts app scope
@@ -77,15 +78,35 @@ for (const phase of ["window", "document"] as const) {
     await expect(opener).toHaveCount(1); await opener.click();
     const modal = page.getByRole("dialog");
     await expect(modal).toHaveCount(1);
-    // The menu trigger is last; Exit zen mode has visibility:hidden in 0.18.1.
-    const last = modal.locator(".main-menu-trigger");
+    const last = modal.getByRole("button", { name: "Close preview", exact: true });
     const first = modal.getByRole("button", { name: "Close dialog", exact: true });
+    const controls = [first, modal.getByRole("button", { name: "Zoom out", exact: true }),
+      modal.getByRole("button", { name: "Zoom in", exact: true }),
+      modal.getByRole("button", { name: "Fit to content", exact: true }),
+      modal.getByRole("button", { name: "Reset zoom", exact: true }), last];
     await expect(last).toBeVisible();
-    await last.focus(); await expect(last).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(first).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    await expect(last).toBeFocused();
+    for (const viewport of [{ width: 1100, height: 900 }, { width: 600, height: 500 }]) {
+      await page.setViewportSize(viewport);
+      await expectNoMenuChrome(modal.locator(".mermaid-excalidraw-enlarged"));
+      // Exact traversal includes every host/plugin button and both wraps. The
+      // public Modal Scope skips the canvas region, whose root remains tabbable.
+      await first.focus();
+      for (let i = 1; i <= controls.length; i++) {
+        await page.keyboard.press("Tab");
+        await expect(controls[i % controls.length]!).toBeFocused();
+        await expect(page.locator("#outside-modal")).not.toBeFocused();
+      }
+      for (let i = controls.length - 1; i >= 0; i--) {
+        await page.keyboard.press("Shift+Tab");
+        await expect(controls[i]!).toBeFocused();
+      }
+      // A real pointer can focus the canvas; Tab must then return to controls
+      // rather than the hidden upstream menu or the background note.
+      await modal.locator("canvas.interactive").click({ position: { x: 100, y: 100 } });
+      await page.keyboard.press("Tab"); await expect(first).toBeFocused();
+      await modal.locator("canvas.interactive").click({ position: { x: 100, y: 100 } });
+      await page.keyboard.press("Shift+Tab"); await expect(last).toBeFocused();
+    }
     await modal.getByRole("button", { name: "Zoom in", exact: true }).focus();
     for (const shortcut of ["Meta+o", "Control+o", "Meta+Shift+p", "Control+Shift+p", "Meta+/", "Control+/"]) {
       await page.keyboard.press(shortcut);
