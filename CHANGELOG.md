@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Hide Excalidraw's standard menu and responsive background bar in inline and enlarged Mermaid viewers while retaining plugin navigation and host close controls. Upstream menu nodes remain in the DOM with no rendered geometry or hit regions; Tab and Shift+Tab traverse the remaining host/plugin controls.
+
 ## [0.1.2]
 
 ### Changed

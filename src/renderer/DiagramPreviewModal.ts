@@ -18,20 +18,25 @@ export class DiagramPreviewModal extends Modal {
     super(app);
     this.setTitle("Mermaid diagram preview");
     // Scope parentage does not inherit the native tabFocusContainerEl field.
-    // Use public DOM focus and key registration to contain Tab in both directions.
+    // Traverse host/plugin controls through the public Scope. Canvas focus is
+    // still available to pointer navigation, but is not a Tab stop in this viewer.
     this.scope.register(null, "Tab", event => {
       if (event.ctrlKey || event.metaKey || event.altKey) return true;
       const controls = [...this.modalEl.querySelectorAll<HTMLElement>(
         "button, [href], input, select, textarea, [tabindex]",
       )].filter(node => node.tabIndex >= 0 && !node.matches(":disabled")
         && !node.closest('[inert], [aria-hidden="true"]') && node.getClientRects().length > 0
+        && !node.closest(".mermaid-excalidraw-canvas")
         && node.ownerDocument.defaultView?.getComputedStyle(node).visibility === "visible");
       const current = controls.indexOf(this.modalEl.ownerDocument.activeElement as HTMLElement);
-      if (controls.length && (current === -1 || (event.shiftKey ? current === 0 : current === controls.length - 1))) {
-        (event.shiftKey ? controls.at(-1) : controls[0])?.focus({ preventScroll: true });
+      if (controls.length) {
+        const next = current === -1 ? (event.shiftKey ? controls.length - 1 : 0)
+          : (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        event.preventDefault();
+        controls[next]?.focus({ preventScroll: true });
         return false;
       }
-      return true; // Allow ordinary DOM navigation without inherited app keys.
+      return true;
     });
   }
 

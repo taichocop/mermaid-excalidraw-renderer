@@ -40,6 +40,12 @@
 .mermaid-excalidraw-container .excalidraw .help-icon {
   display: none;
 }
+/* Excalidraw 0.18.1 retains its menu nodes. Hide the desktop menu/footer and
+   responsive bottom Island together, including their paint and hit regions. */
+.mermaid-excalidraw-container .mermaid-excalidraw-canvas .excalidraw .App-menu,
+.mermaid-excalidraw-container .mermaid-excalidraw-canvas .excalidraw .App-bottom-bar {
+  display: none;
+}
 
 /* Block-widget height must match the CM6 estimate (no collapsing margins). */
 .mermaid-excalidraw-editor {

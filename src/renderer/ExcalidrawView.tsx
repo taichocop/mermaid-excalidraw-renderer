@@ -213,6 +213,8 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
     initialData={{ appState: { viewBackgroundColor: appearance.background } }}
     UIOptions={{ canvasActions, tools: { image: false } }}
   >
+    {/* The empty public replacement suppresses default menu items. Omitting it
+        restores upstream's menu; viewer-scoped CSS hides the retained chrome. */}
     <MainMenu />
   </Excalidraw>
     </div>
