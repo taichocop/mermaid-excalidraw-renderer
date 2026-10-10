@@ -2,31 +2,33 @@
 
 ## [Unreleased]
 
-### Changed
-
-- Make inline diagrams passive in Reading view and Live Preview: note scroll input passes through, and the canvas cannot zoom or pan inline. A focusable diagram button opens an enlarged Obsidian Modal with Enter/Space or a click; standard OFF and source editing keep the existing host behavior.
-- Add explicit zoom in/out, fit and centered 100% reset controls plus mouse/pen drag pan in the enlarged preview. Scoped wheel handling prevents scrolling the note behind it. Escape also closes through the viewer Scope; custom controls support keyboard activation. Restore the opener's focus without scrolling when it still exists.
-- Keep replacement previews in the activating desktop window without restoring focus to the old opener. Let the viewer Scope inherit the Modal Scope while preserving host shortcut isolation; keep forward/reverse Tab traversal inside the visible preview controls.
-- Share conversion output, prepared elements, normalized SVG files and theme handling between both displays. Keep the read-only clipboard/export/shortcut boundary in the Modal. Close owned previews during reconversion, source/widget disposal, note changes and plugin unload; remove roots, observers and listeners through the existing session lifecycle.
-- Add production-bundle regressions for passive wheel/drag behavior, native/SVG enlargement, keyboard controls, host Scope isolation, standard ON/OFF, source editing and foreign-document lifecycle. The final browser suite passed **60/60 tests** after a sequential build. Native Obsidian **1.14.4** checks verified passive trusted-wheel note scrolling, main-window Modal controls/pan/Esc focus restoration, Flowchart/Sequence and Class/ER/State/Block fixtures, Live Preview edits/Undo/Redo/Japanese IME, Source Mode, theme changes, standard OFF/dedicated independence, unload/note-switch cleanup and native popout Modal owner-document placement and disposal. The maintainer completed native popout Escape focus restoration as human acceptance.
-- **The maintainer completed physical two-finger hardware trackpad acceptance.** This human acceptance is separate from the earlier horizontal-scrolling checks using trusted events through the official Chrome DevTools Protocol (CDP); CDP input alone does not establish physical hardware trackpad behavior.
-
 ## [0.1.2]
 
 ### Changed
 
-- Restrict both standard `mermaid` and dedicated `mermaid-excalidraw` embedded viewers to pan/zoom: block canvas/native-menu copy, paste/drop, context-menu export and editor/dialog shortcuts before upstream handlers. Host editors outside the viewer keep their normal behavior; desktop mouse/pen navigation remains available, touch interaction is unsupported.
-- Suspend inherited Obsidian shortcuts with a public parentless Scope only while a viewer has focus; restore host shortcuts on focus exit, window deactivation and disposal. This also protects against host keymaps that run before document capture, while retaining Tab and canvas zoom navigation.
-- Use Obsidian owner-document DOM helpers and cross-window SVG checks. Settings now expose all six searchable declarative controls through the existing validation/redraw/save path; remove deprecated slider tooltips.
+- Make inline diagrams passive in Reading view and Live Preview: scroll input over a diagram goes to the note, and dragging cannot pan or zoom the inline canvas. A focusable diagram button opens an enlarged read-only Obsidian Modal with a click, Enter or Space. Standard OFF and source editing keep the existing host behavior.
+- Add explicit Zoom in, Zoom out, Fit to content and Reset zoom controls in the enlarged preview, plus mouse/pen drag pan. Reset sets 100% zoom and centers the content in one scene update. Wheel/trackpad navigation is disabled inside the preview to prevent scrolling the note behind it; touch canvas interaction remains unsupported.
+- Close the Modal with Escape or the preview/host close button, restoring a connected opener's focus without scrolling. Replacement previews suppress the old opener and host selection restoration and open in the activating desktop window.
+- Let the focused viewer's public Scope inherit the Modal Scope while blocking inherited host commands before early host keymaps can run. The Modal's public Tab handler keeps forward/reverse traversal inside visible preview controls. Release the viewer Scope on focus exit, window deactivation and disposal; passive inline buttons leave normal note shortcuts available.
+- Preserve the read-only clipboard/export/shortcut boundary in the enlarged preview: block canvas/native-menu copy, paste/drop, context-menu export and editor/dialog shortcuts before upstream handlers. Host editors outside the viewer retain normal commands and clipboard behavior. This UI boundary does not remove retained upstream capabilities or create an API sandbox.
+- Share conversion output, prepared elements, normalized SVG files and theme handling between inline diagrams and enlarged previews. Close owned previews during reconversion, source/widget disposal, note changes and plugin unload; dispose roots, observers and listeners through the existing session lifecycle.
+- Use public Obsidian owner-document DOM helpers and cross-window SVG checks. All six searchable declarative settings retain the existing validation/redraw/serialized-save path; remove deprecated slider tooltips.
 - Remove the host dark-canvas `!important` override while preserving monochrome theme contrast.
-- Document the bundle/Sync Standard limitation, retained upstream capabilities and legal/checksum assets. Desktop requirement remains Obsidian **1.14.4+**. Published 0.1.0 and 0.1.1 remain unchanged.
+- Record Issue #16 Scorecard remediation and evidence-qualified upstream capabilities in `SCORECARD_TRIAGE.md`, including the approximately 26 MB offline bundle exceeding Sync Standard's 5 MB file limit. Preserve legal/checksum assets and existing workflow permissions; checksums are not signed attestations. A fresh Directory scan remains a post-publication follow-up, not a completed candidate scan.
+- Desktop requirement remains Obsidian **1.14.4+**. Published 0.1.0 and 0.1.1 tags/assets remain unchanged.
 
 ### Added
 
 - Standard `mermaid` blocks in Live Preview use the existing Excalidraw conversion, strict/resource guards and appearance pipeline when **Render standard mermaid blocks as Excalidraw** is ON. OFF leaves the host editor renderer in control; the saved setting and default ON are unchanged.
 - Public CodeMirror 6 StateField block replacements show source whenever any cursor/selection touches the fence range and suspend during composition. Leaving the block renders the latest source without changing Markdown or Undo history. Source mode is untouched.
 - Shared rendering sessions retain separate MarkdownRenderChild and editor-widget ownership, cancel stale work and dispose React roots. Dedicated `mermaid-excalidraw` keeps its existing host code-block path and remains independent of the standard-block setting.
-- Real CM6 tests cover selection, editing/Undo/Redo, composition events, settings and modes, host widget precedence, native/SVG diagrams, multiple editors, errors and async disposal. Synthetic desktop checks in Obsidian 1.14.4 also confirm Flowchart/Sequence, Class single-SVG fallback, ON/OFF with dedicated blocks independent, source editing/Undo/Redo, Japanese IME, Source/Live Preview transitions, Light/Dark, multiple diagrams/panes, scrolling, resizing and disable/re-enable. Those checks preceded the viewer-boundary changes. Native checks and the maintainer’s physical two-finger hardware trackpad acceptance of the passive-inline/enlarged-preview candidate are recorded under Unreleased. Full third-party plugin compatibility and other OS input methods remain unverified; mobile remains untested.
+- Production-bundle regressions cover real CM6 selection/editing/Undo/Redo/composition, settings and modes, host widget precedence, passive wheel/drag behavior, native/SVG enlargement, centered Reset, keyboard controls, Modal Scope/Tab containment, host shortcut isolation, standard ON/OFF, multiple editors, errors, async disposal and foreign-document/replacement lifecycle. PR #28's final browser suite passed **60/60 tests** after a sequential build.
+
+### Verification and limitations
+
+- Recorded native Obsidian **1.14.4** checks verified passive trusted-wheel note scrolling, main-window Modal controls/pan/Escape focus restoration, Flowchart/Sequence and Class/ER/State/Block fixtures, Live Preview edits/Undo/Redo/Japanese IME, Source Mode, theme changes, standard OFF/dedicated independence, unload/note-switch cleanup and native popout Modal owner-document placement and disposal.
+- On 2026-10-09, the maintainer completed physical two-finger hardware trackpad acceptance and native popout Escape focus restoration. That acceptance preceded the final Reset and Modal focus repairs in PR #28; those repairs have production-browser regression coverage, and native acceptance was not repeated. Trusted Chrome DevTools Protocol input and browser mocks alone do not establish physical hardware behavior.
+- Full third-party plugin compatibility and other OS input methods remain unverified; mobile remains untested. SVG fallback preserves upstream geometry and retained upstream capabilities remain qualified in `SCORECARD_TRIAGE.md`.
 
 ## [0.1.1]
 
