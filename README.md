@@ -10,12 +10,14 @@ Write Mermaid text in a normal `mermaid` code block and use **Reading view or Li
 
 - Passive inline Flowchart and Sequence diagrams, with automatic fitting and an enlarged read-only preview for pan/zoom.
 - Class, ER and State diagrams displayed using Mermaid SVG fallback in the current release.
-- SVG fallback for other supported Mermaid types, including Block (`block-beta`), Gantt, Pie and Timeline.
+- SVG fallback for other supported Mermaid types, including Block (`block-beta`), Quadrant (`quadrantChart`), Gantt, Pie and Timeline.
 - Light/Dark theme following, with black or white text and lines chosen for background contrast.
 - Font size, roughness, canvas height and padding controls.
 - Multiple independent diagrams per note and safe inline errors for invalid input.
 
 SVG fallback preserves Mermaid geometry: it does not turn every diagram type into hand-drawn Excalidraw elements. Roughness and font-size changes may not affect fallback images in the same way as native diagrams.
+
+Quadrant Charts (`quadrantChart`) are verified as SVG image fallback in production-bundle browser tests, including title, axis/quadrant labels, points and point labels in Light/Dark and live theme changes. The Mermaid source remains the diagram definition; individual points and labels are not editable native Excalidraw elements, and roughness does not recreate SVG geometry.
 
 Block Diagrams (`block-beta`) are verified as SVG fallback in production-bundle browser tests and Obsidian 1.14.4 desktop Reading view. Simple blocks, arrows, column spans and nested composites remain readable in Light/Dark, including theme changes; invalid input stays isolated and diagrams clean up when switching notes. Each diagram is a single SVG image, so its blocks, arrows and labels are not independent or separately editable Excalidraw elements. Roughness does not change SVG geometry; native Block conversion requires upstream support and a compatible published converter release.
 
