@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep filled SVG circles with an explicit zero-width stroke visible during theme normalization, restoring default Quadrant Chart points without changing Mermaid geometry or hollow circles.
+
+### Added
+
+- Verify `quadrantChart` SVG fallback with title, axis/quadrant labels, points, Light/Dark, live theme changes, multiple diagrams, invalid-input isolation, resize and lifecycle regression coverage in production-bundle browser tests.
+
 ## [0.1.3]
 
 ### Changed
