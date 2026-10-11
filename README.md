@@ -123,6 +123,24 @@ block-beta
 ```
 ````
 
+### Pie chart
+
+This example was verified in the production bundle with Mermaid 11.17.2 and `mermaid-to-excalidraw` 2.2.2:
+
+````markdown
+```mermaid-excalidraw
+pie showData
+    title Work Distribution
+    "Development": 70
+    "Research": 20
+    "Other": 10
+```
+````
+
+The chart retains its title and legend labels. `showData` appends absolute values to the legend as `Development [70]`, `Research [20]` and `Other [10]`. The sectors show `70%`, `20%` and `10%` both with and without `showData`; removing it leaves the labels and percentages and removes the bracketed values.
+
+Pie renders as one SVG image inside the canvas. Its sectors and labels are not independently editable native Excalidraw elements, and roughness does not reconstruct or change the SVG sectors. Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified the example and the existing simple `Usage` fixture in Light/Dark, during open-note theme switches and in narrow split panes. Titles, legend labels, displayed values/percentages and sector outlines remained visible without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and forward/reverse Tab navigation through the five plugin controls, with upstream menu/background chrome hidden. Coverage is limited to the measured fixtures.
+
 ## Settings
 
 Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams and persist in your vault's plugin settings.

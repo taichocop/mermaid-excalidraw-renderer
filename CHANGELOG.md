@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Expand Pie SVG-fallback regression coverage for `showData`, titles, labels, absolute values, percentages, themes, invalid-input isolation, multiple diagrams and viewer lifecycle.
+- Document the measured Pie example, bracketed `showData` values and single-image SVG rendering. Pie sectors remain part of the SVG image; roughness does not reconstruct them as native Excalidraw elements.
+
+### Verification and limitations
+
+- Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified `showData` and simple `Usage` Pie fixtures in Light/Dark, open-note theme switches and narrow split panes, with visible titles, labels, displayed values/percentages and outlines without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and five-plugin-control Tab/Shift+Tab navigation without upstream menu/background chrome. Verification remains limited to these measured fixtures; no runtime change was needed.
+
 ## [0.1.3]
 
 ### Changed

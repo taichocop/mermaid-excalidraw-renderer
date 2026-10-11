@@ -7,6 +7,9 @@ import { HostKeymapHarness } from "./host-keymap-harness";
 import * as mock from "./obsidian-mock";
 import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
+import type { DiagramMount } from "../../src/renderer/DiagramMount";
+import type { DiagramPreviewModal } from "../../src/renderer/DiagramPreviewModal";
+import type { ViewSceneCache } from "../../src/renderer/ExcalidrawView";
 import { samples } from "./samples";
 import { validateSettings } from "../../src/settings/settings";
 
@@ -138,6 +141,36 @@ const harness = {
     document.body.append(plugin.settingTab.containerEl);
   },
   cssChanged() { for (const callback of plugin.events) callback(); },
+  // Read only Plugin-owned mounts, including the scene prepared by the actual
+  // production view. Handles let lifecycle tests inspect a disposed mount;
+  // nothing reaches into Excalidraw or Obsidian internals.
+  mountHandles(): DiagramMount[] {
+    const renderer: unknown = Reflect.get(plugin, "renderer");
+    if (typeof renderer !== "object" || renderer === null) return [];
+    const mounts: unknown = Reflect.get(renderer, "mounts");
+    if (!(mounts instanceof Set)) return [];
+    return [...mounts].map((mount: unknown) => {
+      if (typeof mount !== "object" || mount === null || !("containerEl" in mount)) throw new Error("Invalid mount");
+      return mount as DiagramMount;
+    });
+  },
+  sceneDiagnostics() {
+    return harness.mountHandles().map(mount => {
+      const cache = Reflect.get(mount, "sceneCache") as ViewSceneCache;
+      return { source: Reflect.get(mount, "source") as string,
+        state: mount.containerEl.dataset.state, raw: mount.data,
+        normalized: cache.scene?.value ?? null,
+        appearance: cache.scene?.appearance ?? null };
+    });
+  },
+  previewHandle(): DiagramPreviewModal | null {
+    const renderer: unknown = Reflect.get(plugin, "renderer");
+    if (typeof renderer !== "object" || renderer === null) return null;
+    const preview: unknown = Reflect.get(renderer, "preview");
+    if (preview === null) return null;
+    if (typeof preview !== "object" || !("contentEl" in preview)) throw new Error("Invalid preview");
+    return preview as DiagramPreviewModal;
+  },
   mountedScenes() {
     const renderer: unknown = Reflect.get(plugin, "renderer");
     if (typeof renderer !== "object" || renderer === null) return [];
