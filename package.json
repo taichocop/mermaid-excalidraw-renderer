@@ -1,6 +1,6 @@
 {
   "name": "mermaid-excalidraw-renderer",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Render Mermaid diagrams as Excalidraw-style diagrams in Obsidian.",
   "license": "MIT",

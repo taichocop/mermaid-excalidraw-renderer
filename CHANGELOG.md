@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.3]
+
 ### Changed
 
-- Hide Excalidraw's standard menu and responsive background bar in inline and enlarged Mermaid viewers while retaining plugin navigation and host close controls. Upstream menu nodes remain in the DOM with no rendered geometry or hit regions; Tab and Shift+Tab traverse the remaining host/plugin controls.
+- Hide Excalidraw's hamburger menu, responsive bar and background chrome in inline and enlarged `mermaid` and `mermaid-excalidraw` viewers. Upstream menu nodes remain in the DOM with zero rendered geometry and no hit regions or reserved space.
+- Retain the enlarged preview's Zoom out, Zoom in, Fit to content, Reset zoom and Close preview controls, with forward Tab and reverse Shift+Tab cycling through the five plugin controls. The host close button (×) stays visible and need not participate in that cycle; Escape/Close focus restoration and host shortcut isolation remain intact.
+- Passive inline scrolling, click/Enter/Space enlargement, enlarged-preview pan and zoom, and existing view-only restrictions remain unchanged. Desktop support remains Obsidian **1.14.4+**.
 
 ## [0.1.2]
 
