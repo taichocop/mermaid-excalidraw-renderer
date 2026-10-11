@@ -9,7 +9,7 @@ import type { PluginSettings } from "../../src/types";
 import type { DiagramData } from "../../src/renderer/conversion";
 import type { DiagramMount } from "../../src/renderer/DiagramMount";
 import type { DiagramPreviewModal } from "../../src/renderer/DiagramPreviewModal";
-import type { ViewSceneCache } from "../../src/renderer/ExcalidrawView";
+import type { ViewProps, ViewSceneCache } from "../../src/renderer/ExcalidrawView";
 import { samples } from "./samples";
 import { validateSettings } from "../../src/settings/settings";
 
@@ -24,6 +24,7 @@ let plugin: TestPlugin;
 const editors = new EditorHarness(() => plugin.editorExtensions);
 const keyboardHost = new HostKeymapHarness(() => plugin.app, editors);
 const children = new Set<mock.MarkdownRenderChild>();
+const retainedViews: { mount: object; cache: ViewProps["sceneCache"] }[] = [];
 
 type Block = { source: string; language: string };
 const blocks: Block[] = [];
@@ -188,6 +189,43 @@ const harness = {
         }) ?? [],
       };
     });
+  },
+  // Optional plugin-owned diagnostics: observe the scene actually prepared by
+  // the production view and retain its cache only when testing disposal.
+  // No Excalidraw/Obsidian internals or alternate normalization are invoked.
+  viewDiagnostics(retain = false) {
+    const renderer: unknown = Reflect.get(plugin, "renderer");
+    if (typeof renderer !== "object" || renderer === null) return [];
+    const mounts: unknown = Reflect.get(renderer, "mounts");
+    if (!(mounts instanceof Set)) return [];
+    return [...mounts].map((mount: unknown) => {
+      if (typeof mount !== "object" || mount === null) throw new Error("Invalid mount");
+      const props = Reflect.get(mount, "viewProps") as ViewProps | null;
+      if (retain && props && !retainedViews.some((entry) => entry.mount === mount)) {
+        retainedViews.push({ mount, cache: props.sceneCache });
+      }
+      const scene = props?.sceneCache.scene?.value;
+      return {
+        source: Reflect.get(mount, "source") as string,
+        root: Reflect.get(mount, "root") !== null,
+        appearance: props?.appearance,
+        preparedAppearance: props?.sceneCache.scene?.appearance,
+        converted: !!props?.sceneCache.converted,
+        elements: scene?.elements.map((element) => ({
+          type: element.type, x: element.x, y: element.y, width: element.width, height: element.height,
+          fileId: element.type === "image" ? element.fileId : null,
+        })) ?? [],
+        files: Object.values(scene?.files ?? {}).map((file) => ({
+          id: file.id, mimeType: file.mimeType, dataURL: file.dataURL,
+        })),
+      };
+    });
+  },
+  retainedViewDiagnostics() {
+    return retainedViews.map(({ mount, cache }) => ({
+      root: Reflect.get(mount, "root") !== null, data: Reflect.get(mount, "data") !== null,
+      converted: !!cache.converted, scene: !!cache.scene,
+    }));
   },
   // Corrupt only this disposable converter result to exercise the production
   // view's handled redraw failure. No host/global/upstream API is patched.
