@@ -1,4 +1,4 @@
-import { stripInlineColors } from "./svgStyles";
+import { preserveSemanticFills } from "./svgStyles";
 import { newElementWith } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BinaryFileData, BinaryFiles } from "@excalidraw/excalidraw/types";
@@ -37,7 +37,7 @@ export function normalizeSvgFiles(
       marker *, .state-start, .state-end { fill: ${foreground} !important; stroke: ${foreground} !important; }
     `;
     svg.appendChild(style);
-    stripInlineColors(svg);
+    preserveSemanticFills(svg, foreground);
     const serialized = new XMLSerializer().serializeToString(svg);
     const encoded = btoa(Array.from(new TextEncoder().encode(serialized), (byte) => String.fromCharCode(byte)).join(""));
     // addFiles() does not replace existing IDs; use stable appearance-specific

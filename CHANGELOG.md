@@ -4,11 +4,15 @@
 
 ### Fixed
 
+- Preserve the meaning of explicit translucent SVG shape fills during Light/Dark normalization by using the resolved foreground instead of background, restoring distinguishable `venn-beta` overlaps without changing geometry or opacity. Keep explicit `none`/`transparent` fills empty and retain the existing opaque-fill and zero-stroke marker policies.
+
 - Fit small diagrams above 100% using both scene dimensions and the padded canvas, bounded at 300% inline and 400% in enlarged previews. Replace obsolete bottom chrome reservation with measured inline-caption clearance; preview controls remain outside the canvas. Fit to content uses optimized fitting, Reset remains centered 100%, and theme/roughness redraws preserve manual navigation. Canvas height and SVG geometry are unchanged.
 
 - Keep filled SVG circles with an explicit zero-width stroke visible during theme normalization, restoring default Quadrant Chart points without changing Mermaid geometry or hollow circles.
 
 ### Added
+
+- Verify `venn-beta` SVG fallback with two/three sets, unions, titles/labels, set/union sizes, text nodes, semantic region pixels, live themes, independent scenes, invalid isolation, resize, lifecycle and enlarged-preview regression coverage. Document single-image rendering, roughness/editability limits and the measured handDrawn hatching limitation.
 
 - Expand Pie SVG-fallback regression coverage for `showData`, titles, labels, absolute values, percentages, themes, invalid-input isolation, multiple diagrams and viewer lifecycle.
 - Document the measured Pie example, bracketed `showData` values and single-image SVG rendering. Pie sectors remain part of the SVG image; roughness does not reconstruct them as native Excalidraw elements.
