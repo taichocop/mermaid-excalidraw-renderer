@@ -2,10 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep filled SVG circles with an explicit zero-width stroke visible during theme normalization, restoring default Quadrant Chart points without changing Mermaid geometry or hollow circles.
+
 ### Added
 
 - Expand Pie SVG-fallback regression coverage for `showData`, titles, labels, absolute values, percentages, themes, invalid-input isolation, multiple diagrams and viewer lifecycle.
 - Document the measured Pie example, bracketed `showData` values and single-image SVG rendering. Pie sectors remain part of the SVG image; roughness does not reconstruct them as native Excalidraw elements.
+- Verify `quadrantChart` SVG fallback with title, axis/quadrant labels, points, Light/Dark, live theme changes, multiple diagrams, invalid-input isolation, resize and lifecycle regression coverage in production-bundle browser tests.
 
 ### Verification and limitations
 

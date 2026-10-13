@@ -31,6 +31,7 @@ export function normalizeSvgFiles(
       rect, circle, ellipse, polygon, path { fill: ${background} !important; stroke: ${foreground} !important; }
       line, polyline { fill: none !important; stroke: ${foreground} !important; }
       [fill="none"] { fill: none !important; }
+      circle[fill][stroke-width="0"]:not([fill="none"]), circle[fill][stroke-width="0px"]:not([fill="none"]) { fill: ${foreground} !important; }
       text, tspan { fill: ${foreground} !important; stroke: none !important; }
       foreignObject, foreignObject * { color: ${foreground} !important; background: transparent !important; }
       marker *, .state-start, .state-end { fill: ${foreground} !important; stroke: ${foreground} !important; }
