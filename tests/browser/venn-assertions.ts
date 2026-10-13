@@ -224,7 +224,7 @@ export async function expectVennPixels(viewer: Locator, geometry: VennGeometry, 
         && r.contrast > Math.max(...singles.map(s => s.contrast)) + 10)
       && (geometry.sets.length !== 3 || !!triple && triple.count > 4 && triple.contrast > Math.max(...pairs.map(p => p.contrast)) + 10);
   }, { timeout: 10_000, intervals: [100, 250, 500] }).toBe(true); }
-  catch (error) { throw new Error(`Venn canvas measurement: ${JSON.stringify(pixels)}`, { cause: error }); }
+  catch (error) { throw Object.assign(new Error(`Venn canvas measurement: ${JSON.stringify(pixels)}`), { cause: error }); }
   return pixels!;
 }
 
