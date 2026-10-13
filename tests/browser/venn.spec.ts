@@ -93,7 +93,10 @@ test("Venn auto-fit survives narrow/wide resize, initially hidden panes, setting
   const viewer = page.locator(".mermaid-excalidraw-container");
   for (const width of [1100, 360, 700, 1100]) {
     await page.setViewportSize({ width, height: 900 });
-    await expectVennPixels(viewer, geometry, initial.file.dataURL, false);
+    // At the narrowest fit the conservative stroke mask covers some entire
+    // thin glyphs. Require independent label ink there; fitted fixtures above
+    // separately require every glyph's non-boundary ink in both themes.
+    await expectVennPixels(viewer, geometry, initial.file.dataURL, false, { individualGlyphs: width >= 700 });
   }
   await page.evaluate(() => window.harness.viewDiagnostics(true));
   await page.evaluate(() => window.harness.rerender());
@@ -158,7 +161,9 @@ test("passive Venn opens with click/Enter/Space; Modal keeps overlap, optimized 
     const level = modal.getByLabel("Zoom level");
     const fit = await level.textContent(); expect(Number.parseInt(fit!)).toBeGreaterThan(100);
     await modal.getByRole("button", { name: "Reset zoom" }).click(); await expect(level).toHaveText("100%");
-    await expectVennPixels(viewer, geometry, prepared.file.dataURL, false);
+    // 100% is deliberately smaller than optimized Fit. Retain label-level
+    // non-boundary ink checks where a whole thin glyph can lie on a circle rim.
+    await expectVennPixels(viewer, geometry, prepared.file.dataURL, false, { individualGlyphs: false });
     await modal.getByRole("button", { name: "Zoom in", exact: true }).click(); await expect(level).toHaveText("120%");
     await modal.getByRole("button", { name: "Zoom out", exact: true }).click(); await expect(level).toHaveText("100%");
     await modal.getByRole("button", { name: "Fit to content" }).click(); await expect(level).toHaveText(fit!);
@@ -242,5 +247,47 @@ test("Mermaid handDrawn look remains an SVG image rather than editable native sh
   await page.evaluate(() => window.harness.updateSettings({ roughness: 2 }));
   expect((await preparedVenn(page, source)).file.dataURL).toBe(before);
   expect(prepared.scene.raw!.elements[0]!.type).toBe("image");
+  assertErrors();
+});
+
+test("boundary strokes cannot satisfy a missing union label or its glyphs", async ({ page }, info) => {
+  const assertErrors = watchErrors(page);
+  await page.evaluate(source => window.harness.mount(source), threeSets);
+  const before = await preparedVenn(page, threeSets);
+  const geometry = await vennGeometry(page, before.file.dataURL);
+  const viewer = page.locator(".mermaid-excalidraw-container");
+  await expectVennPixels(viewer, geometry, before.file.dataURL, false);
+  const newId = await page.evaluate(async () => {
+    const mount = window.harness.mountHandles()[0]!, data = mount.data!;
+    const original = Object.values(data.files!)[0]!;
+    const xml = new TextDecoder().decode(Uint8Array.from(atob(original.dataURL.split(",")[1]!), c => c.charCodeAt(0)));
+    const svg = new DOMParser().parseFromString(xml, "image/svg+xml");
+    const label = [...svg.querySelectorAll("text")].find(node => node.textContent === "Buildable");
+    if (!label) throw new Error("Missing control label");
+    // Hide only this label's paint, preserving every emitted boundary and its
+    // text/layout. Use a new public BinaryFile ID to avoid upstream image cache.
+    label.setAttribute("opacity", "0");
+    const bytes = new TextEncoder().encode(new XMLSerializer().serializeToString(svg));
+    const id = `${original.id}-missing-label` as typeof original.id;
+    const dataURL = `data:image/svg+xml;base64,${btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""))}` as typeof original.dataURL;
+    mount.data = { ...data, elements: data.elements.map(e => e.type === "image" ? { ...e, fileId: id } : e),
+      files: { [id]: { ...original, id, dataURL } } };
+    await window.harness.updateSettings({ roughness: 2 });
+    return id;
+  });
+  let current = await preparedVenn(page, threeSets);
+  await expect.poll(async () => {
+    current = await preparedVenn(page, threeSets);
+    return current.rawFile.id === newId && current.file.id.startsWith(newId);
+  }).toBe(true);
+  let pixels;
+  try { await expect.poll(async () => {
+    pixels = await vennPixels(viewer, geometry, current.file.dataURL, false);
+    const label = pixels?.labels.find(t => t.text === "Buildable");
+    return !!pixels && pixels.boundaries.every(hit => hit >= .9) && !!label
+      && label.ink === 0 && label.glyphs.every(g => g.ink === 0)
+      && pixels.labels.filter(t => t.text !== "Buildable").every(t => t.ink > 3);
+  }).toBe(true); }
+  finally { await attachVennEvidence(info, "missing-union-label", current, { geometry, pixels }, viewer); }
   assertErrors();
 });

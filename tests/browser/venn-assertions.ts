@@ -44,6 +44,16 @@ export async function vennGeometry(page: Page, dataURL: string) {
         labels.push({ text: text.data.trim(), box: screenBox(range.getBoundingClientRect()), glyphs });
       }
       const sets = [...root.querySelectorAll<SVGPathElement>(".venn-circle > path")];
+      // A raster control with the same emitted geometry/paint but no labels
+      // or fills lets production pixel checks exclude every boundary stroke.
+      // It is decoded as an image only; no XML is inserted into the host DOM.
+      const strokes = root.cloneNode(true) as SVGSVGElement;
+      strokes.querySelectorAll("text,foreignObject").forEach(node => node.remove());
+      for (const node of strokes.querySelectorAll("path,circle,ellipse,rect,polygon")) {
+        if (node instanceof SVGElement) node.style.setProperty("fill-opacity", "0", "important");
+      }
+      const strokeXml = new XMLSerializer().serializeToString(strokes);
+      const strokeDataURL = `data:image/svg+xml;base64,${btoa(Array.from(new TextEncoder().encode(strokeXml), byte => String.fromCharCode(byte)).join(""))}`;
       const paint = (node: SVGGraphicsElement) => {
         const style = getComputedStyle(node);
         return { fill: style.fill, stroke: style.stroke, opacity: style.opacity,
@@ -53,11 +63,10 @@ export async function vennGeometry(page: Page, dataURL: string) {
         const p = node.getPointAtLength(node.getTotalLength() * index / 64);
         return point(node, p.x, p.y);
       }).map(p => ({ x: p.x, y: p.y })));
-      const contains = (node: SVGPathElement, x: number, y: number) => node.isPointInFill(
-        new DOMPoint(x, y).matrixTransform(root.getScreenCTM()!).matrixTransform(node.getScreenCTM()!.inverse()),
-      );
-      const membership = (x: number, y: number) => sets.reduce((mask, node, index) =>
-        mask | (contains(node, x, y) ? 1 << index : 0), 0);
+      const membershipTransforms = sets.map(node => ({ node,
+        local: node.getScreenCTM()!.inverse().multiply(root.getScreenCTM()!) }));
+      const membership = (x: number, y: number) => membershipTransforms.reduce((mask, { node, local }, index) =>
+        mask | (node.isPointInFill(new DOMPoint(x, y).matrixTransform(local)) ? 1 << index : 0), 0);
       const regions: Record<string, { x: number; y: number }[]> = {};
       // Stay away from every text bbox and every boundary by checking nearby
       // points with the same browser membership. No stroke/label can pass as fill.
@@ -71,7 +80,7 @@ export async function vennGeometry(page: Page, dataURL: string) {
           (regions[mask] ??= []).push({ x, y });
         }
       }
-      return { width: root.width.baseVal.value, height: root.height.baseVal.value,
+      return { width: root.width.baseVal.value, height: root.height.baseVal.value, strokeDataURL,
         viewBox: { x: vb.x, y: vb.y, width: vb.width, height: vb.height }, labels, contours, regions,
         sets: sets.map(node => ({ box: box(node), paint: paint(node) })),
         intersections: [...root.querySelectorAll<SVGPathElement>(".venn-intersection > path")].map(node => ({ box: box(node), paint: paint(node) })),
@@ -164,18 +173,36 @@ export async function vennPixels(viewer: Locator, geometry: VennGeometry, dataUR
       if (score < registration.score) registration = { scale, x, y, hits, score };
     }
     if (registration.hits < contourPoints.length * 0.9) return null;
+    const strokeImage = new Image(); strokeImage.src = geometry.strokeDataURL; await strokeImage.decode();
+    const strokeCanvas = document.createElement("canvas"); strokeCanvas.width = width; strokeCanvas.height = height;
+    const strokeContext = strokeCanvas.getContext("2d", { willReadFrequently: true })!;
+    strokeContext.fillStyle = dark ? "#1e1e1e" : "white"; strokeContext.fillRect(0, 0, width, height);
+    strokeContext.drawImage(strokeImage, registration.x + vb.x * registration.scale, registration.y + vb.y * registration.scale,
+      vb.width * registration.scale, vb.height * registration.scale);
+    const strokePixels = strokeContext.getImageData(0, 0, width, height).data;
+    // Dilate just the sparse stroke raster once. Label and glyph measurements
+    // then share the same exclusion mask, including antialiasing/tolerance.
+    const boundaryMask = new Uint8Array(width * height);
+    for (let i = 0; i < strokePixels.length; i += 4) {
+      if (contrast(strokePixels[i]!) <= 10) continue;
+      const x = i / 4 % width, y = Math.floor(i / 4 / width);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const px = x + dx, py = y + dy;
+        if (px >= 0 && py >= 0 && px < width && py < height) boundaryMask[py * width + px] = 1;
+      }
+    }
     const pixel = (p: { x: number; y: number }) => ({ x: registration.x + p.x * registration.scale,
       y: registration.y + p.y * registration.scale });
     const textInk = (box: { x: number; y: number; width: number; height: number }) => {
-      const p = pixel(box), width = box.width * registration.scale, height = box.height * registration.scale;
+      const p = pixel(box), boxWidth = box.width * registration.scale, boxHeight = box.height * registration.scale;
       let ink = 0;
       // Include pixels intersecting the bbox. Thin letters at 100% or in a
       // narrow pane can be less than two pixels wide; inward rounding would
       // discard their entire raster footprint.
-      for (let y = Math.floor(p.y); y < Math.ceil(p.y + height); y++) for (let x = Math.floor(p.x); x < Math.ceil(p.x + width); x++) {
-        if (contrast(value(actual, node.width, node.height, x, y)) > 130) ink++;
+      for (let y = Math.floor(p.y); y < Math.ceil(p.y + boxHeight); y++) for (let x = Math.floor(p.x); x < Math.ceil(p.x + boxWidth); x++) {
+        if (!boundaryMask[y * width + x] && contrast(value(actual, node.width, node.height, x, y)) > 130) ink++;
       }
-      return { ink, bounded: p.x > 0 && p.y > 0 && p.x + width < node.width && p.y + height < node.height };
+      return { ink, bounded: p.x > 0 && p.y > 0 && p.x + boxWidth < node.width && p.y + boxHeight < node.height };
     };
     const regions = Object.entries(geometry.regions).map(([mask, points]) => {
       const values = points.map(p => { const q = pixel(p); return value(actual, node.width, node.height, q.x, q.y); }).sort((a, b) => a - b);
@@ -209,7 +236,8 @@ export async function preparedVenn(page: Page, source: string) {
   return { scene, rawFile: Object.values(scene.raw!.files!)[0]!, file: Object.values(scene.normalized!.files)[0]! };
 }
 
-export async function expectVennPixels(viewer: Locator, geometry: VennGeometry, dataURL: string, dark: boolean) {
+export async function expectVennPixels(viewer: Locator, geometry: VennGeometry, dataURL: string, dark: boolean,
+  options: { individualGlyphs?: boolean } = {}) {
   let pixels: Awaited<ReturnType<typeof vennPixels>> = null;
   try { await expect.poll(async () => {
     pixels = await vennPixels(viewer, geometry, dataURL, dark);
@@ -218,7 +246,8 @@ export async function expectVennPixels(viewer: Locator, geometry: VennGeometry, 
     const pairs = pixels.regions.filter(r => [3, 5, 6].includes(r.mask));
     const triple = pixels.regions.find(r => r.mask === 7);
     return pixels.boundaries.every(hit => hit >= 0.9)
-      && pixels.labels.every(t => t.bounded && t.ink > 3 && t.glyphs.every(g => g.bounded && g.ink > 0))
+      && pixels.labels.every(t => t.bounded && t.ink > 3
+        && t.glyphs.every(g => g.bounded && (options.individualGlyphs === false || g.ink > 0)))
       && singles.length === geometry.sets.length && singles.every(r => r.count > 4 && r.contrast > 12)
       && pairs.length === (geometry.sets.length === 3 ? 3 : 1) && pairs.every(r => r.count > 4
         && r.contrast > Math.max(...singles.map(s => s.contrast)) + 10)
