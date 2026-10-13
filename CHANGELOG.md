@@ -16,6 +16,8 @@
 
 ### Verification and limitations
 
+- Expand production-bundle Flowchart/graph regression coverage for TD/TB/BT/LR/RL, representative edge styles, labels, bidirectional arrows, basic shapes and subgraphs. Record the current upstream limitations: `~~~` becomes a visible headless line, and measured subgraphs use a single SVG fallback image without native grouping. No runtime, dependency or version change.
+
 - Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified `showData` and simple `Usage` Pie fixtures in Light/Dark, open-note theme switches and narrow split panes, with visible titles, labels, displayed values/percentages and outlines without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and five-plugin-control Tab/Shift+Tab navigation without upstream menu/background chrome. Verification remains limited to these measured fixtures; no runtime change was needed.
 
 ## [0.1.3]
