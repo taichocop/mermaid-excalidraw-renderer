@@ -126,6 +126,7 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
     let cancelled = false;
     let frame: number | undefined;
     let viewportSize = "";
+    let pendingSize = "";
     const fitViewport = () => {
       if (cancelled || api.getAppState().isLoading) return;
       const width = canvas.clientWidth, height = canvas.clientHeight;
@@ -139,15 +140,18 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
       if (!options) {
         // A reveal must fit even if its size equals the last visible size.
         viewportSize = "";
+        pendingSize = "";
         if (frame !== undefined) win.cancelAnimationFrame(frame);
         return;
       }
-      if (size === viewportSize) return;
-      viewportSize = size;
+      const current = api.getAppState();
+      if (size === viewportSize && current.width === width && current.height === height) return;
+      if (size === pendingSize) return;
+      pendingSize = size;
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       frame = win.requestAnimationFrame(() => {
         if (cancelled || canvas.clientWidth !== width || canvas.clientHeight !== height) {
-          viewportSize = "";
+          pendingSize = "";
           if (!cancelled) fitViewport();
           return;
         }
@@ -161,10 +165,17 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
         frame = win.requestAnimationFrame(() => {
           if (cancelled) return;
           if (canvas.clientWidth !== width || canvas.clientHeight !== height) {
-            viewportSize = "";
+            pendingSize = "";
             fitViewport();
             return;
           }
+          pendingSize = "";
+          // React may defer updateScene beyond a frame, especially when several
+          // hidden SVG viewers reveal together. Wait for public onChange to
+          // confirm dimensions rather than fitting against 0px or stale width.
+          const committed = api.getAppState();
+          if (committed.width !== width || committed.height !== height) return;
+          viewportSize = size;
           api.scrollToContent(api.getSceneElements(), options);
         });
       });

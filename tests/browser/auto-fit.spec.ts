@@ -170,3 +170,36 @@ test("minimum padding leaves measured inline caption clear of tall diagram ink",
   }
   await info.attach("inline-caption-clearance", { body: JSON.stringify(evidence), contentType: "application/json" });
 });
+
+
+test("revealed SVG viewers recover late dimension commits without fitting stale viewport bounds", async ({ page }) => {
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>("main")!.style.display = "none";
+    window.harness.mountSamples(["class", "er", "state"]);
+  });
+  await expect(page.locator('[data-state="ready"]')).toHaveCount(3);
+  await page.evaluate(() => document.querySelector<HTMLElement>("main")!.style.display = "");
+  const viewers = page.locator(".mermaid-excalidraw-container");
+  for (let index = 0; index < 3; index++) await expectFit(page, viewers.nth(index), index, 3);
+  await page.evaluate(() => document.querySelector<HTMLElement>("main")!.style.display = "none");
+  await expect(page.locator("main")).toBeHidden();
+  await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("main")!;
+    main.style.width = "300px";
+    main.style.display = "";
+    window.harness.theme(true);
+  });
+  for (let index = 0; index < 3; index++) {
+    await expect.poll(async () => (await fitState(page, index))?.width).toBe(300);
+    await expectFit(page, viewers.nth(index), index, 3);
+  }
+  // Reproduce a delayed host/upstream measurement commit through the public
+  // scene API. DOM dimensions stay 300px; the viewer must synchronize before fit.
+  await page.evaluate(() => {
+    for (const api of window.fitApis) api.updateScene({ appState: { width: 900, height: 600 } });
+  });
+  for (let index = 0; index < 3; index++) {
+    await expect.poll(async () => (await fitState(page, index))?.width).toBe(300);
+    await expectFit(page, viewers.nth(index), index, 3);
+  }
+});

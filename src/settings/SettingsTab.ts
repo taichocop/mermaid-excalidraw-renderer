@@ -39,7 +39,7 @@ export class SettingsTab extends PluginSettingTab {
       },
       {
         name: "Canvas padding",
-        desc: "Space around the diagram in pixels (16–128), with extra room for canvas controls. Reduced in very small panes.",
+        desc: "Space around the diagram in pixels (16–128), with clearance for the inline enlargement caption. Reduced in very small panes.",
         control: { type: "slider", key: "canvasPadding", ...CANVAS_PADDING_RANGE, step: 1, defaultValue: DEFAULT_SETTINGS.canvasPadding },
       },
       {
