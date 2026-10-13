@@ -342,7 +342,7 @@ test("loads the bundled CJS plugin and renders native and SVG fallback types off
       diagram: diagrams[index], background: scene.background, ink: scene.ink,
       hasInk: scene.ink > 100, colored: scene.colored, filter: scene.filter,
       fitted: scene.left >= 16 && scene.right < scene.width - 16
-        && scene.top >= 16 && scene.bottom < scene.height - 48,
+        && scene.top >= 16 && scene.bottom < scene.height - 16,
     }))).toEqual(diagrams.map((diagram) => ({
       diagram, background: [background, background, background], ink: expect.any(Number),
       hasInk: true, colored: 0, filter: "none", fitted: true,
@@ -385,7 +385,7 @@ test("Appearance controls persist and redraw roughness 0/1/2 on an open diagram"
     .toEqual([800, 800]);
 });
 
-test("padding fits a large diagram without clipping, responds to resize and does not enlarge a tiny diagram", async ({ page }) => {
+test("padding fits a large diagram without clipping, responds to resize and enlarges a tiny diagram within the viewport", async ({ page }) => {
   await page.evaluate(() => {
     window.harness.mount("flowchart LR\n" + Array.from({ length: 10 }, (_, i) => `N${i}[Step ${i}] --> N${i + 1}[Step ${i + 1}]`).join("\n"));
   });
@@ -403,14 +403,15 @@ test("padding fits a large diagram without clipping, responds to resize and does
   await expect.poll(async () => {
     const scene = (await scenePixels(page))[0];
     return scene && scene.ink > 100 && scene.left > 5 && scene.right < scene.width - 5
-      && scene.top > 5 && scene.bottom < scene.height - 48;
+      && scene.top > 5 && scene.bottom < scene.height - 16;
   }).toBe(true);
   await page.evaluate(() => { window.harness.clear(); window.harness.mount("flowchart TD\nA[x]"); });
   await expect.poll(async () => (await scenePixels(page))[0]?.ink ?? 0).toBeGreaterThan(20);
   await page.evaluate(() => window.harness.updateSettings({ canvasPadding: 16 }));
   await expect.poll(async () => {
     const scene = (await scenePixels(page))[0];
-    return scene && scene.right - scene.left < 100 && scene.bottom - scene.top < 100;
+    return scene && scene.right - scene.left > 100 && scene.bottom - scene.top > 100
+      && scene.left > 0 && scene.top > 0 && scene.right < scene.width && scene.bottom < scene.height;
   }).toBe(true);
 });
 

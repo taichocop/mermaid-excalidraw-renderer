@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Fit small diagrams above 100% using both scene dimensions and the padded canvas, bounded at 300% inline and 400% in enlarged previews. Replace obsolete bottom chrome reservation with measured inline-caption clearance; preview controls remain outside the canvas. Fit to content uses optimized fitting, Reset remains centered 100%, and theme/roughness redraws preserve manual navigation. Canvas height and SVG geometry are unchanged.
+
 - Keep filled SVG circles with an explicit zero-width stroke visible during theme normalization, restoring default Quadrant Chart points without changing Mermaid geometry or hollow circles.
 
 ### Added

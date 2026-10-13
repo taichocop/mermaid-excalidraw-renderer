@@ -153,12 +153,12 @@ Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams 
 | Font size | 20 px | 12–48 px; native diagram text |
 | Roughness | Architect (1) | Clean (0), Architect (1), Artist (2) |
 | Canvas height | 600 px | 240–1200 px |
-| Canvas padding | 32 px | 16–128 px; extra space for canvas controls |
+| Canvas padding | 32 px | 16–128 px; space around fitted content |
 | Theme | Follow Obsidian | Uses the note background and contrasting black/white foreground |
 
 The standard-block toggle immediately updates all open Live Preview editors and requests a full redraw of open Reading views, including split panes; rendering may briefly show a loading indicator. Cached previews in editing panes are also invalidated, so returning to Reading view uses the current setting. Disabling the plugin also clears its canvases and refreshes Markdown preview caches so standard Mermaid can render again, including when returning from editing mode. The note text and other plugins’ registrations are preserved. Explicit OFF values are saved; missing or invalid values default to ON.
 
-Canvas width follows the note. Small diagrams are not enlarged beyond 100%. In very narrow panes, padding is reduced to leave room for content. Legacy `maxHeight` settings migrate to canvas height.
+Canvas width follows the note. Automatic fitting uses the scene width and height and available canvas after padding and clearance for the inline enlargement caption. Small diagrams may enlarge above 100%, up to 300% inline and 400% in the enlarged preview. **Fit to content** uses the same optimized preview fit; **Reset zoom** always returns to centered 100%. Pane resizing recalculates fit, while theme and roughness changes preserve manual zoom and pan. Canvas height stays fixed at your setting, so wide diagrams can still leave vertical whitespace. In very narrow panes, padding is reduced to leave room for content. Legacy `maxHeight` settings migrate to canvas height.
 
 ## Privacy and security
 

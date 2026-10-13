@@ -60,6 +60,7 @@ const canvasActions = {
 
 export function ExcalidrawView({ data, appearance, settings, container, keymap, sceneCache, onOpen, onClose, modalScope }: ViewProps) {
   const enlarged = !!onClose;
+  const inlineHeight = enlarged ? null : settings.canvasHeight;
   useLayoutEffect(() => enlarged
     ? installViewOnlyBoundary(container, keymap, { onEscape: onClose, blockWheel: true, parentScope: modalScope })
     : undefined, [container, keymap, enlarged, onClose, modalScope]);
@@ -69,17 +70,14 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
   const [zoom, setZoom] = useState(1);
   const receiveAPI = useCallback((value: ExcalidrawImperativeAPI) => setApi(value), []);
 
+  const [sceneAPI, setSceneAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+
+  // Updating colors/roughness does not change the user's viewport. Font/source
+  // reconversion creates a new view through DiagramMount's existing lifecycle.
   useEffect(() => {
     if (!api || failure !== null) return;
     let cancelled = false;
-    let frame: number | undefined;
-    const win = container.ownerDocument.defaultView;
-    if (!win) return;
-    let observer: ResizeObserver | undefined;
     let unsubscribe: (() => void) | undefined;
-
-    // Virgil is the font used by upstream skeleton conversion. Build embeds it
-    // in styles.css so measurement uses the same font as the rendered canvas.
     void (async () => {
       try {
         await container.ownerDocument.fonts.load("20px Virgil");
@@ -95,57 +93,19 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
         }
         const scene = sceneCache.scene.value;
         let initialized = false;
-        let viewportSize = "";
-        const fit = () => {
-          if (cancelled || !initialized) return;
-          const width = container.clientWidth;
-          if (width === 0) return; // Wait for a hidden pane to become visible.
-          if (!enlarged) container.style.height = `${settings.canvasHeight}px`;
-          if (frame !== undefined) win.cancelAnimationFrame(frame);
-          frame = win.requestAnimationFrame(() => {
-            if (cancelled) return;
-            // refresh() updates offsets only in 0.18.1. Obsidian can reveal a
-            // cached section after Excalidraw measured it at 0x0, so synchronize
-            // dimensions through the public scene API before fitting as well.
-            api.refresh();
-            const width = container.clientWidth;
-            const height = enlarged ? container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!.clientHeight : container.clientHeight;
-            const state = api.getAppState();
-            if (state.width !== width || state.height !== height) {
-              api.updateScene({ appState: { width, height }, captureUpdate: CaptureUpdateAction.NEVER });
-            }
-            frame = win.requestAnimationFrame(() => {
-              if (!cancelled) api.scrollToContent(api.getSceneElements(),
-                canvasFitOptions(container.clientWidth, enlarged ? container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!.clientHeight : container.clientHeight, settings.canvasPadding));
-            });
+        const applyScene = () => {
+          if (cancelled || initialized || api.getAppState().isLoading) return;
+          initialized = true;
+          api.updateScene({
+            elements: scene.elements, appState: { viewBackgroundColor: appearance.background },
+            captureUpdate: CaptureUpdateAction.NEVER,
           });
+          api.addFiles(Object.values(scene.files));
+          setSceneAPI(api);
         };
-        const syncViewport = () => {
-          if (cancelled || api.getAppState().isLoading) return;
-          if (!initialized) {
-            initialized = true;
-            api.updateScene({
-              elements: scene.elements, appState: { viewBackgroundColor: appearance.background },
-              captureUpdate: CaptureUpdateAction.NEVER,
-            });
-            api.addFiles(Object.values(scene.files));
-            fit();
-          }
-          const { width, height, zoom } = api.getAppState();
-          if (enlarged) setZoom(zoom.value);
-          const size = `${width}x${height}`;
-          if (size !== viewportSize) {
-            viewportSize = size;
-            fit();
-          }
-        };
-        // 0.18.1 provides the API before initialData has finished loading.
-        // Watch the public state rather than racing its initialization/resize.
-        unsubscribe = api.onChange(syncViewport);
-        syncViewport();
-        observer = new win.ResizeObserver(fit);
-        if (enlarged) observer.observe(container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas")!);
-        observer.observe(container);
+        // The public API arrives before initialData finishes loading in 0.18.1.
+        unsubscribe = api.onChange(applyScene);
+        applyScene();
       } catch (error: unknown) {
         if (!cancelled) {
           console.error("[Mermaid Excalidraw Renderer] Scene rendering failed", error);
@@ -153,13 +113,79 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
         }
       }
     })();
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [api, data, appearance, settings.roughness, container, failure, sceneCache]);
+
+  useEffect(() => {
+    if (!api || sceneAPI !== api || failure !== null) return;
+    const win = container.ownerDocument.defaultView;
+    const canvas = container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas");
+    if (!win || !canvas) return;
+    const caption = enlarged ? null : container.querySelector<HTMLElement>(".mermaid-excalidraw-open span");
+    if (inlineHeight !== null) container.style.height = `${inlineHeight}px`;
+    let cancelled = false;
+    let frame: number | undefined;
+    let viewportSize = "";
+    const fitViewport = () => {
+      if (cancelled || api.getAppState().isLoading) return;
+      const width = canvas.clientWidth, height = canvas.clientHeight;
+      // The passive opener's visible caption is the only inline overlay.
+      // Measure its clearance, including a small stroke margin, instead of
+      // reserving space for removed upstream chrome.
+      const bottomClearance = caption && caption.getClientRects().length
+        ? Math.max(0, Math.ceil(canvas.getBoundingClientRect().bottom - caption.getBoundingClientRect().top + 8)) : 0;
+      const options = canvasFitOptions(width, height, settings.canvasPadding, enlarged ? "modal" : "inline", bottomClearance);
+      const size = `${width}x${height}x${bottomClearance}`;
+      if (!options) {
+        // A reveal must fit even if its size equals the last visible size.
+        viewportSize = "";
+        if (frame !== undefined) win.cancelAnimationFrame(frame);
+        return;
+      }
+      if (size === viewportSize) return;
+      viewportSize = size;
+      if (frame !== undefined) win.cancelAnimationFrame(frame);
+      frame = win.requestAnimationFrame(() => {
+        if (cancelled || canvas.clientWidth !== width || canvas.clientHeight !== height) {
+          viewportSize = "";
+          if (!cancelled) fitViewport();
+          return;
+        }
+        // refresh updates offsets only in 0.18.1. Synchronize dimensions via
+        // the public scene API for panes initially measured while hidden.
+        api.refresh();
+        const state = api.getAppState();
+        if (state.width !== width || state.height !== height) {
+          api.updateScene({ appState: { width, height }, captureUpdate: CaptureUpdateAction.NEVER });
+        }
+        frame = win.requestAnimationFrame(() => {
+          if (cancelled) return;
+          if (canvas.clientWidth !== width || canvas.clientHeight !== height) {
+            viewportSize = "";
+            fitViewport();
+            return;
+          }
+          api.scrollToContent(api.getSceneElements(), options);
+        });
+      });
+    };
+    const syncViewport = () => {
+      if (enlarged) setZoom(api.getAppState().zoom.value);
+      fitViewport();
+    };
+    const unsubscribe = api.onChange(syncViewport);
+    syncViewport();
+    const observer = new win.ResizeObserver(fitViewport);
+    observer.observe(canvas);
+    observer.observe(container);
+    if (caption) observer.observe(caption);
     return () => {
       cancelled = true;
-      unsubscribe?.();
-      observer?.disconnect();
+      unsubscribe();
+      observer.disconnect();
       if (frame !== undefined) win.cancelAnimationFrame(frame);
     };
-  }, [api, data, appearance, settings.roughness, settings.canvasHeight, settings.canvasPadding, container, failure, enlarged, sceneCache]);
+  }, [api, sceneAPI, data, inlineHeight, settings.canvasPadding, container, failure, enlarged]);
 
   if (failure !== null) return <InlineError message={failure} />;
   const changeZoom = (value: number) => {
@@ -172,8 +198,12 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
       scrollY: state.scrollY + state.height / (2 * next) - state.height / (2 * state.zoom.value),
     }, captureUpdate: CaptureUpdateAction.NEVER });
   };
-  const fit = () => api?.scrollToContent(api.getSceneElements(),
-    canvasFitOptions(api.getAppState().width, api.getAppState().height, settings.canvasPadding));
+  const fit = () => {
+    if (!api) return;
+    const canvas = container.querySelector<HTMLElement>(".mermaid-excalidraw-canvas");
+    const options = canvasFitOptions(canvas?.clientWidth ?? 0, canvas?.clientHeight ?? 0, settings.canvasPadding, "modal");
+    if (options) api.scrollToContent(api.getSceneElements(), options);
+  };
   const reset = () => {
     if (!api) return;
     const state = api.getAppState();
