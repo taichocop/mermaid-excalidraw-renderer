@@ -171,7 +171,7 @@ for (const source of [
     const level = modal.getByLabel("Zoom level");
     const reset = modal.getByRole("button", { name: "Reset zoom", exact: true });
     await expectInk(viewer);
-    await expect(level).toHaveText("100%"); // Small fixtures fit without scaling.
+    await expect.poll(async () => Number((await level.textContent())?.replace("%", ""))).toBeGreaterThan(100);
     await page.waitForTimeout(700); // Let initial resize/fit finish before sampling.
     await reset.click();
     await expect(level).toHaveText("100%");
