@@ -143,6 +143,14 @@ The chart retains its title and legend labels. `showData` appends absolute value
 
 Pie renders as one SVG image inside the canvas. Its sectors and labels are not independently editable native Excalidraw elements, and roughness does not reconstruct or change the SVG sectors. Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified the example and the existing simple `Usage` fixture in Light/Dark, during open-note theme switches and in narrow split panes. Titles, legend labels, displayed values/percentages and sector outlines remained visible without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and forward/reverse Tab navigation through the five plugin controls, with upstream menu/background chrome hidden. Coverage is limited to the measured fixtures.
 
+### Flowchart and graph verification
+
+Production-bundle browser fixtures with Mermaid **11.17.2**, `mermaid-to-excalidraw` **2.2.2** and Excalidraw **0.18.1** measure native `flowchart` and `graph` chains in **TD, TB, BT, LR and RL**, representative rectangle/rounded/circle/diamond shapes, edge labels and bidirectional `<-->` arrows. `-->`, `---`, `-.->` and `==>` become Excalidraw arrow elements: `---` has no arrowheads, dotted Mermaid edges use Excalidraw's dashed style, and thick edges use stroke width 4 versus 2 for ordinary edges. Rounded shapes and circles use Excalidraw geometry; text fitting can stretch a circle into an ellipse. These fixtures do not establish support for every Flowchart syntax or exact Mermaid geometry.
+
+**Invisible layout links are currently not invisible in native conversion.** In the measured `A ~~~ B` fixture, the link affects node placement but converter 2.2.2 emits a visible solid line with no arrowheads. This is an upstream conversion limitation tracked by [Issue #22](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/22), not a verified invisible-link feature.
+
+Measured basic and nested subgraphs, including internal `direction`, render as **one SVG fallback image**. The upstream parser reports `SubGraph element not found` with this dependency combination, then falls back to Mermaid's SVG. Subgraph boundaries, labels and Mermaid layout remain in the image; native Excalidraw node/edge grouping is absent. Mermaid also [documents](https://github.com/mermaid-js/mermaid/blob/mermaid%4011.17.2/packages/mermaid/src/docs/syntax/flowchart.md#direction-in-subgraphs) that linking an internal node to the outside makes the subgraph inherit its parent's direction. The plugin does not correct upstream layout or reconstruct native subgraph geometry.
+
 ## Settings
 
 Open **Settings → Mermaid Excalidraw Renderer**. Changes update open diagrams and persist in your vault's plugin settings.
