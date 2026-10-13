@@ -10,7 +10,7 @@ Write Mermaid text in a normal `mermaid` code block and use **Reading view or Li
 
 - Passive inline Flowchart and Sequence diagrams, with automatic fitting and an enlarged read-only preview for pan/zoom.
 - Class, ER and State diagrams displayed using Mermaid SVG fallback in the current release.
-- SVG fallback for other supported Mermaid types, including Block (`block-beta`), Quadrant (`quadrantChart`), Gantt, Pie and Timeline.
+- SVG fallback for other supported Mermaid types, including Venn (`venn-beta`), Block (`block-beta`), Quadrant (`quadrantChart`), Gantt, Pie and Timeline.
 - Light/Dark theme following, with black or white text and lines chosen for background contrast.
 - Font size, roughness, canvas height and padding controls.
 - Multiple independent diagrams per note and safe inline errors for invalid input.
@@ -142,6 +142,26 @@ pie showData
 The chart retains its title and legend labels. `showData` appends absolute values to the legend as `Development [70]`, `Research [20]` and `Other [10]`. The sectors show `70%`, `20%` and `10%` both with and without `showData`; removing it leaves the labels and percentages and removes the bracketed values.
 
 Pie renders as one SVG image inside the canvas. Its sectors and labels are not independently editable native Excalidraw elements, and roughness does not reconstruct or change the SVG sectors. Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified the example and the existing simple `Usage` fixture in Light/Dark, during open-note theme switches and in narrow split panes. Titles, legend labels, displayed values/percentages and sector outlines remained visible without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and forward/reverse Tab navigation through the five plugin controls, with upstream menu/background chrome hidden. Coverage is limited to the measured fixtures.
+
+### Venn SVG fallback
+
+The pinned Mermaid **11.17.2**, converter **2.2.2** and Excalidraw **0.18.1** render `venn-beta` as **one SVG image with an `image/svg+xml` BinaryFile**. Mermaid syntax support does not imply native editable Excalidraw ellipses/text; roughness does not reconstruct or change the SVG geometry.
+
+````markdown
+```mermaid-excalidraw
+venn-beta
+  title "Team Skills"
+  set Frontend["Frontend"]
+  set Backend["Backend"]
+  union Frontend,Backend["Fullstack"]
+```
+````
+
+Production-bundle browser regressions and a disposable synthetic Vault in macOS Obsidian **1.14.4 Reading view** verified two and three sets, pairwise/triple unions, titles/display labels, `:N` set/union sizes and indented `text` nodes in Light/Dark. Explicit translucent SVG fills use the theme foreground while retaining upstream fill/stroke opacity: overlapping regions remain distinguishable as layered monochrome shading. Tests measure individual regions and actual canvas label/glyph pixels, relative set geometry, live theme restoration, independent Venn files, native Flowchart coexistence, safe invalid-input isolation, resize/hidden panes, viewer navigation and cleanup. Coverage applies to the measured fixtures, not every Venn layout.
+
+The upstream layout can place labels across boundaries, and dense three-set labels are small at 100%; use the enlarged preview and Fit for readability. The pinned runtime retains quotation marks in the measured titles. Mermaid's explicit `look: handDrawn` also remains an SVG fallback; its dense hatching obscures some union labels in the measured three-set example, so the classic-look overlap/label acceptance above does not extend to that mode. No global look override is applied. Text-position behavior outside these fixtures remains upstream-dependent: see [Mermaid #8076](https://github.com/mermaid-js/mermaid/issues/8076) and the open [fix #8089](https://github.com/mermaid-js/mermaid/pull/8089).
+
+At the 2026-10-14 check, the latest published converter was still **2.2.2**; [upstream dispatch](https://github.com/excalidraw/mermaid-to-excalidraw/blob/7849b487be67cf2d439c713c847839d2494d59b6/src/parseMermaid.ts) has no native Venn branch and uses GraphImage fallback. Native editable Venn conversion requires compatible published upstream support.
 
 ### Flowchart and graph verification
 
