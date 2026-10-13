@@ -420,10 +420,16 @@ test("both Pie previews retain five plugin controls, host focus cycle, themes, F
     const fitted = await expectPie(page, source, expectation, viewer);
     const level = modal.getByLabel("Zoom level");
     const fitLevel = await level.textContent();
+    // Optimized fit now fills the viewport above 100%. Zooming further can
+    // intentionally clip it; start this fully-visible manual-navigation check
+    // at centered 100%, while retaining the optimized transform for Fit below.
+    await controls[4]!.click(); await expect(level).toHaveText("100%");
+    const manualBaseline = await expectPie(page, source, expectation, viewer);
+    expectCentered(manualBaseline);
     await controls[2]!.click();
-    await expect(level).not.toHaveText(fitLevel!);
+    await expect(level).toHaveText("120%");
     const zoomed = await expectPie(page, source, expectation, viewer);
-    expect(zoomed.pixels.registration.scale).toBeGreaterThan(fitted.pixels.registration.scale * 1.1);
+    expect(zoomed.pixels.registration.scale).toBeGreaterThan(manualBaseline.pixels.registration.scale * 1.1);
     await pan(page, viewer);
     const panned = await expectPie(page, source, expectation, viewer);
     expect(Math.abs(panned.pixels.registration.x - zoomed.pixels.registration.x)).toBeGreaterThan(30);
