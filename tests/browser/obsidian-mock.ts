@@ -8,24 +8,32 @@ export const editorLivePreviewField = StateField.define<boolean>({
   update: (value, tr) => tr.effects.reduce((current, effect) => effect.is(livePreviewMode) ? effect.value : current, value),
 });
 
-// Model owner-document-preserving Obsidian DOM helpers in the fixture only.
-Node.prototype.createEl = function (tag, options) {
-  const doc = this.nodeType === 9 ? this as Document : this.ownerDocument!;
-  const element = doc.createElement(tag);
-  if (typeof options === "string") element.className = options;
-  else if (options?.cls) element.className = Array.isArray(options.cls) ? options.cls.join(" ") : options.cls;
-  this.appendChild(element);
-  return element;
-};
-Node.prototype.createDiv = function (options) { return this.createEl("div", options); };
-Node.prototype.instanceOf = function <T>(type: { new(): T }): this is Node & T {
-  // Detached XML documents have no defaultView. Model constructorWin by walking
-  // the node's real prototype chain, rather than using the importing realm.
-  for (let proto = Object.getPrototypeOf(this); proto; proto = Object.getPrototypeOf(proto)) {
-    if (proto.constructor.name === type.name) return true;
-  }
-  return false;
-};
+// Native Obsidian 1.14.4 A/B: helpers use their installation realm's factory.
+// A main-realm receiver adopted into a secondary document therefore creates a
+// main-realm child. Install separately per frame so the fixture catches this.
+export function installDomHelpers(win: Window) {
+  const RealmNode = Reflect.get(win, "Node") as typeof Node;
+  const doc = win.document;
+  RealmNode.prototype.createEl = function (tag, options) {
+    const element = doc.createElement(tag);
+    if (typeof options === "string") element.className = options;
+    else if (options?.cls) element.className = Array.isArray(options.cls) ? options.cls.join(" ") : options.cls;
+    this.appendChild(element);
+    return element;
+  };
+  RealmNode.prototype.createDiv = function (options) { return this.createEl("div", options); };
+  RealmNode.prototype.instanceOf = function <T>(type: { new(): T }): this is Node & T {
+    // Detached XML has no defaultView; inspect the real prototype chain.
+    for (let proto = Object.getPrototypeOf(this); proto; proto = Object.getPrototypeOf(proto)) {
+      if (proto.constructor.name === type.name) return true;
+    }
+    return false;
+  };
+}
+installDomHelpers(window);
+
+let adoptedModalMode = false;
+export function useAdoptedModals() { adoptedModalMode = true; }
 
 export class MarkdownRenderChild {
   private loaded = false;
@@ -158,18 +166,22 @@ export class Modal {
     this.scope = new Scope(app.scope);
     const focused = document.activeElement;
     const doc = focused?.tagName === "IFRAME" ? (focused as HTMLIFrameElement).contentDocument! : document;
-    this.containerEl = doc.createElement("div"); this.containerEl.className = "modal-container";
-    const backdrop = doc.createElement("div"); backdrop.className = "modal-bg";
+    // Opt-in Native 1.14.4 behavior: construct in main, then adopt into the
+    // active secondary document before the production onOpen path runs.
+    const factory = adoptedModalMode ? document : doc;
+    this.containerEl = factory.createElement("div"); this.containerEl.className = "modal-container";
+    const backdrop = factory.createElement("div"); backdrop.className = "modal-bg";
     backdrop.onclick = () => this.close();
-    this.modalEl = doc.createElement("div"); this.modalEl.className = "modal";
+    this.modalEl = factory.createElement("div"); this.modalEl.className = "modal";
     this.scope.tabFocusContainerEl = this.containerEl;
     this.modalEl.setAttribute("role", "dialog"); this.modalEl.setAttribute("aria-modal", "true");
-    this.titleEl = doc.createElement("h2"); this.titleEl.className = "modal-title";
-    this.contentEl = doc.createElement("div"); this.contentEl.className = "modal-content";
-    const close = doc.createElement("button"); close.textContent = "Close"; close.className = "modal-close-button";
+    this.titleEl = factory.createElement("h2"); this.titleEl.className = "modal-title";
+    this.contentEl = factory.createElement("div"); this.contentEl.className = "modal-content";
+    const close = factory.createElement("button"); close.textContent = "Close"; close.className = "modal-close-button";
     close.setAttribute("aria-label", "Close dialog"); close.onclick = () => this.close();
     this.modalEl.append(close, this.titleEl, this.contentEl);
     this.containerEl.append(backdrop, this.modalEl);
+    if (factory !== doc) doc.adoptNode(this.containerEl);
     this.scope.register(null, "Escape", () => { this.close(); return false; });
   }
   setTitle(title: string) { this.titleEl.textContent = title; return this; }

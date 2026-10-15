@@ -107,3 +107,67 @@ for (const foreign of [false, true]) {
     expect(errors).toEqual([]);
   });
 }
+
+
+test("Modal DOM preserves target realm with an adopted main-realm parent", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/"); await page.evaluate(() => window.ready);
+  await page.evaluate(() => {
+    const h = window.harness;
+    h.useAdoptedModals();
+    h.mountInFrame('flowchart LR\nA[Popout] --> B[Modal]');
+    h.mountInFrame('classDiagram\nclass Replacement', "adopted-replacement");
+  });
+  const firstSurface = page.frameLocator("#popout-fixture");
+  const nextSurface = page.frameLocator("#adopted-replacement");
+  const opener = firstSurface.getByRole("button", { name: "Open enlarged Mermaid diagram" });
+  const nextOpener = nextSurface.getByRole("button", { name: "Open enlarged Mermaid diagram" });
+  const dialog = (surface: typeof firstSurface) => surface.getByRole("dialog", { name: "Mermaid diagram preview" });
+  await opener.click();
+  await expect(dialog(firstSurface).locator("canvas.static")).toBeVisible();
+  const first = await holdPreview(page);
+  // The parent must retain main's prototype after adoption, while the actual
+  // production onOpen viewer must use the secondary document's constructor.
+  const expectAdopted = async (handle: PreviewHandle) => {
+    expect(await handle.evaluate(({ preview, viewer }) => {
+      const content = preview.contentEl, owner = content.ownerDocument;
+      const ForeignElement = Reflect.get(owner.defaultView!, "HTMLElement") as typeof HTMLElement;
+      return { secondaryOwner: owner !== document, contentMainRealm: content instanceof HTMLElement,
+        contentSecondaryRealm: content instanceof ForeignElement, viewerMainRealm: viewer instanceof HTMLDivElement };
+    })).toEqual({ secondaryOwner: true, contentMainRealm: true, contentSecondaryRealm: false, viewerMainRealm: false });
+    await expectViewer(handle, true);
+  };
+  await expectAdopted(first);
+  await first.evaluate(({ preview }) => preview.refresh());
+  await expectAdopted(first); // Same viewer and React root, no extra append.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await nextOpener.evaluate(node => {
+    node.ownerDocument.defaultView!.focus();
+    (node as HTMLButtonElement).focus();
+    (node as HTMLButtonElement).click();
+  });
+  await expect(dialog(firstSurface)).toHaveCount(0);
+  await expect(dialog(nextSurface).locator("canvas.static")).toBeVisible();
+  await expectDisposed(first); await first.dispose();
+  const replacement = await holdPreview(page);
+  await expectAdopted(replacement);
+  await page.keyboard.press("Escape");
+  await expect(dialog(nextSurface)).toHaveCount(0); await expect(nextOpener).toBeFocused();
+  await expectDisposed(replacement); await replacement.dispose();
+
+  await nextOpener.click();
+  await expect(dialog(nextSurface).locator("canvas.static")).toBeVisible();
+  const closed = await holdPreview(page); await expectAdopted(closed);
+  await dialog(nextSurface).getByRole("button", { name: "Close preview", exact: true }).click();
+  await expect(nextOpener).toBeFocused(); await expectDisposed(closed); await closed.dispose();
+
+  await nextOpener.click();
+  await expect(dialog(nextSurface).locator("canvas.static")).toBeVisible();
+  const disabled = await holdPreview(page); await expectAdopted(disabled);
+  await page.evaluate(() => window.harness.disable());
+  await expect(dialog(nextSurface)).toHaveCount(0);
+  await expectDisposed(disabled); await disabled.dispose();
+  expect(errors).toEqual([]);
+});

@@ -52,9 +52,13 @@ export class DiagramPreviewModal extends Modal {
     this.contentEl.replaceChildren();
     // Modal opens in Obsidian's active window. All owned DOM, focus, observers
     // and cancellation use that document rather than the importing window.
-    this.viewer = this.contentEl.createDiv({
+    // Native Modal content can retain main's prototype after adoption into a
+    // popout. A fragment from its owner document selects that realm's helper.
+    const fragment = this.contentEl.ownerDocument.createDocumentFragment();
+    this.viewer = fragment.createDiv({
       cls: "mermaid-excalidraw-container mermaid-excalidraw-enlarged",
     });
+    this.contentEl.append(this.viewer);
     this.ownerWindow = this.viewer.ownerDocument.defaultView;
     this.ownerWindow?.addEventListener("pagehide", this.closePreview);
     this.root = createRoot(this.viewer);
