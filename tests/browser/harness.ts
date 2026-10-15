@@ -80,6 +80,7 @@ const harness = {
   mountSamples(names: (keyof typeof samples)[], language = "mermaid-excalidraw") {
     names.forEach((name) => harness.mount(samples[name], language));
   },
+  useAdoptedModals() { mock.useAdoptedModals(); },
   mountInFrame(source: string, id = "popout-fixture") {
     const frame = document.createElement("iframe"); frame.id = id;
     frame.style.width = "1000px"; frame.style.height = "800px";
@@ -88,10 +89,7 @@ const harness = {
     doc.head.innerHTML = document.head.innerHTML;
     doc.body.className = "theme-light";
     const foreign = frame.contentWindow!;
-    const ForeignNode = Reflect.get(foreign, "Node") as typeof Node;
-    ForeignNode.prototype.createEl = Node.prototype.createEl;
-    ForeignNode.prototype.createDiv = Node.prototype.createDiv;
-    ForeignNode.prototype.instanceOf = Node.prototype.instanceOf;
+    mock.installDomHelpers(foreign);
     const section = doc.createElement("section"), pre = doc.createElement("pre"), code = doc.createElement("code");
     code.className = "language-mermaid-excalidraw"; code.textContent = source;
     pre.append(code); section.append(pre); doc.body.append(section);
