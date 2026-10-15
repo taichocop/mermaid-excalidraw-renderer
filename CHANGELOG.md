@@ -2,34 +2,33 @@
 
 ## [Unreleased]
 
+## [0.1.4]
+
 ### Added
 
-- Add pointer-anchored mouse wheel and desktop trackpad pinch zoom inside the enlarged read-only preview. Vertical two-finger scrolling follows the same zoom rule; horizontal-only input leaves the viewport unchanged. Inline diagrams keep note-first passive scrolling.
-- Normalize pixel, line and page wheel units using the canvas's CSS dimensions, bound each input to one existing zoom-button step, and retain the 10%–3000% manual zoom range. Preview controls/title/close areas contain wheel input without zooming or scrolling the background note; Fit, centered 100% Reset, mouse/pen pan and view-only restrictions remain available.
+- Add pointer-anchored mouse wheel and desktop trackpad pinch zoom inside the enlarged read-only preview. Ordinary vertical two-finger scrolling follows the same zoom rule; horizontal-only input leaves the viewport unchanged. Inline diagrams keep passive note scrolling.
+- Normalize pixel, line and page wheel units using the canvas's CSS dimensions, limit each event to one zoom-button step (20%), and retain the 10%–3000% manual zoom range. Wheel input over preview controls, title and close areas stays contained without zooming or scrolling the background note.
 
 ### Fixed
 
-- Restore mouse/pen drag pan in enlarged previews in desktop popout windows. Own the gesture in the canvas's window and update the public viewport API, with cancellation on release, blur, pagehide and viewer disposal; inline diagrams remain passive.
-
-- Preserve the meaning of explicit translucent SVG shape fills during Light/Dark normalization by using the resolved foreground instead of background, restoring distinguishable `venn-beta` overlaps without changing geometry or opacity. Keep explicit `none`/`transparent` fills empty and retain the existing opaque-fill and zero-stroke marker policies.
-
-- Fit small diagrams above 100% using both scene dimensions and the padded canvas, bounded at 300% inline and 400% in enlarged previews. Replace obsolete bottom chrome reservation with measured inline-caption clearance; preview controls remain outside the canvas. Fit to content uses optimized fitting, Reset remains centered 100%, and theme/roughness redraws preserve manual navigation. Canvas height and SVG geometry are unchanged.
-
+- Restore mouse/pen drag pan in enlarged previews in desktop popout windows. Own the gesture in the canvas's window and update the public viewport API; release, cancellation, blur, pagehide and viewer disposal end the gesture.
+- Fit small diagrams above 100% using both scene dimensions and the padded canvas, bounded at 300% inline and 400% in enlarged previews. Use measured inline-caption clearance; Fit to content uses optimized fitting, Reset remains centered 100%, and theme/roughness redraws preserve manual navigation. Canvas height and SVG geometry are unchanged.
+- Preserve explicit translucent SVG shape fills using the resolved Light/Dark foreground while retaining opacity, restoring distinguishable Venn semantic overlaps without changing geometry. Explicit `none`/`transparent` fills remain empty.
 - Keep filled SVG circles with an explicit zero-width stroke visible during theme normalization, restoring default Quadrant Chart points without changing Mermaid geometry or hollow circles.
-
-### Added
-
-- Verify `venn-beta` SVG fallback with two/three sets, unions, titles/labels, set/union sizes, text nodes, semantic region pixels, live themes, independent scenes, invalid isolation, resize, lifecycle and enlarged-preview regression coverage. Document single-image rendering, roughness/editability limits and the measured handDrawn hatching limitation.
-
-- Expand Pie SVG-fallback regression coverage for `showData`, titles, labels, absolute values, percentages, themes, invalid-input isolation, multiple diagrams and viewer lifecycle.
-- Document the measured Pie example, bracketed `showData` values and single-image SVG rendering. Pie sectors remain part of the SVG image; roughness does not reconstruct them as native Excalidraw elements.
-- Verify `quadrantChart` SVG fallback with title, axis/quadrant labels, points, Light/Dark, live theme changes, multiple diagrams, invalid-input isolation, resize and lifecycle regression coverage in production-bundle browser tests.
+- Preserve the Modal viewer's DOM constructor realm in desktop popouts by creating it through an owner-document fragment helper before appending it to the host's adopted content element.
 
 ### Verification and limitations
 
-- Expand production-bundle Flowchart/graph regression coverage for TD/TB/BT/LR/RL, representative edge styles, labels, bidirectional arrows, basic shapes and subgraphs. Record the current upstream limitations: `~~~` becomes a visible headless line, and measured subgraphs use a single SVG fallback image without native grouping. No runtime, dependency or version change.
+- Expand Pie SVG-fallback regression coverage for `showData`, titles, labels, absolute values, percentages, themes, invalid-input isolation, multiple diagrams and viewer lifecycle. Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified the measured `showData` and simple `Usage` fixtures in Light/Dark, open-note theme switches and narrow split panes, including preview controls and focus navigation.
+- Expand production-bundle Flowchart/graph coverage for TD/TB/BT/LR/RL, representative edge styles, labels, bidirectional arrows, basic shapes and subgraphs. With the pinned converter, `~~~` currently becomes a visible headless line. Measured basic/nested subgraphs use a single SVG fallback image; native Excalidraw grouping is absent.
+- Verify Quadrant SVG fallback titles, axis/quadrant labels, points, Light/Dark, live theme changes, independent diagrams, invalid-input isolation, resize and lifecycle in production-bundle browser tests.
+- Verify Venn SVG fallback with two/three sets, unions, titles/labels, set/union sizes, text nodes, semantic region pixels, live themes, independent scenes, invalid isolation, resize, lifecycle and enlarged-preview regressions. Explicit `look: handDrawn` hatching can obscure dense union labels; measured classic-look acceptance does not extend to that mode.
+- Pie, Quadrant and Venn each remain one SVG image, distinct from native editable Excalidraw elements. Sectors, points and labels remain SVG content; roughness does not reconstruct their geometry. Venn semantic overlaps are preserved without a native Venn converter.
+- Desktop requirement remains Obsidian **1.14.4+**; mobile is untested and unsupported. Physical macOS trackpad acceptance is recorded for [PR #44's exact runtime artifact](https://github.com/taichocop/mermaid-excalidraw-renderer/pull/44); other OS/host gesture delivery remains unverified. Coverage applies to the measured fixtures and environments.
 
-- Production-bundle regressions and synthetic-vault Obsidian **1.14.4** desktop Reading view checks verified `showData` and simple `Usage` Pie fixtures in Light/Dark, open-note theme switches and narrow split panes, with visible titles, labels, displayed values/percentages and outlines without clipping. Enlarged previews retained Zoom, Fit, centered Reset, Close and five-plugin-control Tab/Shift+Tab navigation without upstream menu/background chrome. Verification remains limited to these measured fixtures; no runtime change was needed.
+### Maintenance
+
+- Add repository agent guidance and clarify contributor validation and evidence requirements.
 
 ## [0.1.3]
 
