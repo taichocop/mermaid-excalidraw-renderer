@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add pointer-anchored mouse wheel and desktop trackpad pinch zoom inside the enlarged read-only preview. Vertical two-finger scrolling follows the same zoom rule; horizontal-only input leaves the viewport unchanged. Inline diagrams keep note-first passive scrolling.
+- Normalize pixel, line and page wheel units using the canvas's CSS dimensions, bound each input to one existing zoom-button step, and retain the 10%–3000% manual zoom range. Preview controls/title/close areas contain wheel input without zooming or scrolling the background note; Fit, centered 100% Reset, mouse/pen pan and view-only restrictions remain available.
+
 ### Fixed
 
 - Preserve the meaning of explicit translucent SVG shape fills during Light/Dark normalization by using the resolved foreground instead of background, restoring distinguishable `venn-beta` overlaps without changing geometry or opacity. Keep explicit `none`/`transparent` fills empty and retain the existing opaque-fill and zero-stroke marker policies.

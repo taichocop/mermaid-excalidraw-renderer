@@ -1,4 +1,5 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   CaptureUpdateAction,
   Excalidraw,
@@ -16,6 +17,7 @@ import type { ResolvedTheme } from "../appearance/resolveTheme";
 import { errorMessage, type DiagramData } from "./conversion";
 import { installViewOnlyBoundary, type ViewerKeymap } from "./viewOnlyBoundary";
 import { canvasFitOptions } from "./layout";
+import { normalizeWheelDelta, zoomAtAnchor } from "./wheelZoom";
 
 export interface ViewSceneCache {
   converted?: { data: DiagramData; elements: ExcalidrawElement[] };
@@ -61,9 +63,6 @@ const canvasActions = {
 export function ExcalidrawView({ data, appearance, settings, container, keymap, sceneCache, onOpen, onClose, modalScope }: ViewProps) {
   const enlarged = !!onClose;
   const inlineHeight = enlarged ? null : settings.canvasHeight;
-  useLayoutEffect(() => enlarged
-    ? installViewOnlyBoundary(container, keymap, { onEscape: onClose, blockWheel: true, parentScope: modalScope })
-    : undefined, [container, keymap, enlarged, onClose, modalScope]);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const pointer = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -71,6 +70,43 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
   const receiveAPI = useCallback((value: ExcalidrawImperativeAPI) => setApi(value), []);
 
   const [sceneAPI, setSceneAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+
+  const onCanvasWheel = useCallback((event: WheelEvent, canvas: Element) => {
+    if (!api || sceneAPI !== api || failure !== null) return;
+    const win = container.ownerDocument.defaultView;
+    const rect = canvas.getBoundingClientRect();
+    if (!win || rect.width <= 0 || rect.height <= 0
+      || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+    const style = win.getComputedStyle(canvas);
+    const lineHeight = Number.parseFloat(style.lineHeight);
+    // CSS `normal` has no numeric computed line height. Use that canvas's em
+    // size rather than guessing a device-dependent wheel line length.
+    const linePixels = Number.isFinite(lineHeight) && lineHeight > 0
+      ? lineHeight : Number.parseFloat(style.fontSize);
+    const delta = normalizeWheelDelta(event.deltaY, event.deltaMode, linePixels, rect.height);
+    if (!delta) return;
+    const anchor = {
+      x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+      y: Math.max(0, Math.min(rect.height, event.clientY - rect.top)),
+    };
+    // updateScene batches React state in 0.18.1. Commit each input through the
+    // public React API so a same-task burst reads the preceding zoom/anchor,
+    // rather than repeatedly overwriting one old viewport or queuing stale work.
+    flushSync(() => {
+      const state = api.getAppState();
+      const next = zoomAtAnchor({ zoom: state.zoom.value, scrollX: state.scrollX, scrollY: state.scrollY }, delta, anchor);
+      if (!next) return;
+      api.updateScene({ appState: {
+        zoom: { value: next.zoom as Zoom["value"] }, scrollX: next.scrollX, scrollY: next.scrollY,
+      }, captureUpdate: CaptureUpdateAction.NEVER });
+    });
+  }, [api, sceneAPI, failure, container]);
+
+  useLayoutEffect(() => enlarged
+    ? installViewOnlyBoundary(container, keymap, {
+      onEscape: onClose, blockWheel: true, onCanvasWheel, parentScope: modalScope,
+      wheelRoot: container.closest<HTMLElement>(".mermaid-excalidraw-modal") ?? container,
+    }) : undefined, [container, keymap, enlarged, onClose, onCanvasWheel, modalScope]);
 
   // Updating colors/roughness does not change the user's viewport. Font/source
   // reconversion creates a new view through DiagramMount's existing lifecycle.
