@@ -124,3 +124,26 @@ test("foreign pan cancels on capture loss, blur, close and pagehide without stal
   await page.evaluate(() => window.harness.disable());
   await expect(page.frameLocator("#popout-fixture").locator("canvas")).toHaveCount(0);
 });
+
+for (const foreign of [false, true]) test(`${foreign ? "foreign" : "main"}: rejected right-button pan over a native link stays inert and error-free`, async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  const { canvas } = await openPreview(page, foreign,
+    'flowchart LR\nA[Linked] --> B[Other]\nclick A "./target"');
+  const link = await page.evaluate(() => {
+    const api = window.fitApis[1]!, s = api.getAppState();
+    const element = api.getSceneElements().find(e => e.link)!;
+    return { link: element.link, x: (element.x + element.width / 2 + s.scrollX) * s.zoom.value,
+      y: (element.y + element.height / 2 + s.scrollY) * s.zoom.value };
+  });
+  expect(link.link).toBeTruthy();
+  await canvas.hover({ position: link });
+  await expect(canvas).toHaveCSS("cursor", "pointer");
+  const before = await fitState(page, 1), url = page.url();
+  // This is the first canvas down: upstream has no previous down event.
+  await canvas.click({ position: link, button: "right" });
+  expect(errors).toEqual([]);
+  expect(await fitState(page, 1)).toEqual(before);
+  expect(page.url()).toBe(url);
+  expect(page.context().pages()).toHaveLength(1);
+});

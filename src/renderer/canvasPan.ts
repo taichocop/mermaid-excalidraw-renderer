@@ -37,10 +37,18 @@ export function installCanvasPan(container: HTMLElement,
     cancel(event);
     finish();
   };
+  const canvasTarget = (event: PointerEvent) => {
+    const target = event.target as Element | null;
+    return target?.matches?.("canvas") && target.closest(".mermaid-excalidraw-canvas") ? target : undefined;
+  };
+  const pairedUp = (event: PointerEvent) => {
+    // Rejected buttons and not-ready starts also consumed their down event.
+    // Upstream's link handler assumes a preceding down; keep the pair owned.
+    if (canvasTarget(event)) cancel(event);
+  };
   const down = (event: PointerEvent) => {
-    const canvas = event.target as Element | null;
-    if (!["mouse", "pen"].includes(event.pointerType) || !canvas?.matches?.("canvas")
-      || !canvas.closest(".mermaid-excalidraw-canvas")) return;
+    const canvas = canvasTarget(event);
+    if (!["mouse", "pen"].includes(event.pointerType) || !canvas) return;
     // Even a not-yet-ready scene must not start an upstream window-global pan.
     cancel(event);
     if (gesture || !event.isPrimary || (event.button !== 0 && event.button !== 1)
@@ -61,8 +69,10 @@ export function installCanvasPan(container: HTMLElement,
     try { canvas.setPointerCapture(event.pointerId); } catch { /* Synthetic input may not be active. */ }
   };
   container.addEventListener("pointerdown", down, { capture: true, passive: false });
+  container.addEventListener("pointerup", pairedUp, { capture: true, passive: false });
   return () => {
     finish();
     container.removeEventListener("pointerdown", down, true);
+    container.removeEventListener("pointerup", pairedUp, true);
   };
 }
