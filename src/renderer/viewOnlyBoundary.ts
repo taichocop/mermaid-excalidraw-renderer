@@ -18,7 +18,13 @@ export function isViewNavigationKey(event: Pick<KeyboardEvent, "key" | "code" | 
 
 const NAVIGATION_CONTROLS = ".zoom-actions, .scroll-back-to-content, .mermaid-excalidraw-controls";
 
-interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean; parentScope?: Scope }
+interface BoundaryOptions {
+  onEscape?: () => void;
+  blockWheel?: boolean;
+  wheelRoot?: HTMLElement;
+  onCanvasWheel?: (event: WheelEvent, canvas: Element) => void;
+  parentScope?: Scope;
+}
 
 /** A scoped DOM integration boundary, not a patch of upstream internals or
  * host clipboard/network APIs. Capture precedes upstream document copy handlers
@@ -28,10 +34,11 @@ interface BoundaryOptions { onEscape?: () => void; blockWheel?: boolean; parentS
 export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKeymap, options: BoundaryOptions = {}): () => void {
   const doc = container.ownerDocument;
   const win = doc.defaultView;
-  const inside = (target: EventTarget | null): target is Node => {
+  const wheelRoot = options.wheelRoot ?? container;
+  const inside = (target: EventTarget | null, root = container): target is Node => {
     const node = target as Node | null;
     return node !== null && typeof node.instanceOf === "function"
-      && node.instanceOf(Node) && container.contains(node);
+      && node.instanceOf(Node) && root.contains(node);
   };
   const focused = () => inside(doc.activeElement);
   const cancel = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
@@ -96,11 +103,16 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
     ["pointerdown", onInteraction], ["click", onInteraction], ["dblclick", onBlocked],
   ];
   const onWheel = (event: WheelEvent) => {
-    // Enlarged preview uses explicit zoom buttons and drag pan. Prevent wheel
-    // scroll chaining into the note only inside this modal, never inline.
-    if (options.blockWheel && inside(event.target)) cancel(event);
+    if (!options.blockWheel || !inside(event.target, wheelRoot)) return;
+    // Contain wheel across the owned Modal, including its title/close button,
+    // before upstream can also handle it. Only a viewer canvas starts zoom.
+    cancel(event);
+    if (inside(event.target) && event.target.instanceOf(Element) && event.target.matches("canvas")
+      && event.target.closest(".mermaid-excalidraw-canvas")) {
+      options.onCanvasWheel?.(event, event.target);
+    }
   };
-  if (options.blockWheel) container.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  if (options.blockWheel) wheelRoot.addEventListener("wheel", onWheel, { capture: true, passive: false });
   const capture = { capture: true };
   for (const [type, handler] of listeners) doc.addEventListener(type, handler, capture);
   doc.addEventListener("focusin", syncScope, capture);
@@ -111,7 +123,7 @@ export function installViewOnlyBoundary(container: HTMLElement, keymap: ViewerKe
   syncScope();
   return () => {
     releaseScope();
-    if (options.blockWheel) container.removeEventListener("wheel", onWheel, true);
+    if (options.blockWheel) wheelRoot.removeEventListener("wheel", onWheel, true);
     doc.removeEventListener("focusin", syncScope, capture);
     doc.removeEventListener("focusout", onFocusOut, capture);
     win?.removeEventListener("focus", syncScope);

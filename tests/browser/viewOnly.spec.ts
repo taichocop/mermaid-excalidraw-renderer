@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { fitInk, fitState, observeFitAPI } from "./auto-fit-helpers";
 
 // All sinks are disposable stubs. No system clipboard, file picker or existing
 // browser storage is accessed. The real production bundle supplies the viewer.
 test("view-only blocks copy/export, dialogs, storage and file/network actions while retaining navigation", async ({ page }, testInfo) => {
+  await observeFitAPI(page);
   await page.addInitScript(() => {
     const calls: string[] = [];
     Object.assign(window, { viewOnlyCalls: calls });
@@ -119,10 +121,14 @@ test("view-only blocks copy/export, dialogs, storage and file/network actions wh
   await page.mouse.move(box.x + 100, box.y + 100); await page.mouse.down();
   await page.mouse.move(box.x + 200, box.y + 130, { steps: 5 }); await page.mouse.up();
   await expect.poll(pixels).not.toBe(panBefore);
-  const wheelBefore = await pixels();
+  const apiIndex = await page.evaluate(() => window.fitApis.length - 1);
+  const wheelBefore = (await fitState(page, apiIndex))!, inkBefore = (await fitInk(viewer))!;
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(200);
-  expect(await pixels()).toBe(wheelBefore);
+  await expect.poll(async () => (await fitState(page, apiIndex))?.zoom).toBeGreaterThan(wheelBefore.zoom);
+  await expect.poll(async () => {
+    const ink = (await fitInk(viewer))!;
+    return Math.abs((ink.right - ink.left) - (inkBefore.right - inkBefore.left));
+  }).toBeGreaterThan(5);
   await viewer.getByRole("button", { name: "Fit to content" }).click();
   await viewer.getByRole("button", { name: "Close preview" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);

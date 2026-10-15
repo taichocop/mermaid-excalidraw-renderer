@@ -1,5 +1,6 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type ElementHandle, type Locator } from "@playwright/test";
 import { expectBoundedInk, expectNoMenuChrome } from "./chrome-assertions";
+import { fitInk, fitState, observeFitAPI } from "./auto-fit-helpers";
 
 async function pixels(viewer: Locator) {
   return viewer.locator("canvas.static").evaluate(node => {
@@ -24,7 +25,35 @@ async function expectInk(viewer: Locator) {
   })).toBeGreaterThan(100);
 }
 
+async function expectReleasedWheel(root: ElementHandle<HTMLElement | SVGElement> | null) {
+  expect(root).not.toBeNull();
+  const result = await root!.evaluate(node => {
+    const Wheel = Reflect.get(node.ownerDocument.defaultView!, "WheelEvent") as typeof WheelEvent;
+    const event = new Wheel("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+    node.dispatchEvent(event); return { connected: node.isConnected, prevented: event.defaultPrevented };
+  });
+  expect(result).toEqual({ connected: false, prevented: false });
+  await root!.dispose();
+}
+
+async function ownerInkWidth(viewer: Locator) {
+  return viewer.locator("canvas.static").evaluate(node => {
+    // A production React root may create this canvas in another realm. Read
+    // its public DOM pixels without an instanceof check against the caller.
+    const canvas = node as HTMLCanvasElement;
+    const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let left = canvas.width, right = -1;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3]! > 200 && Math.abs(data[i]! - data[0]!) > 16) {
+        const x = (i / 4) % canvas.width; left = Math.min(left, x); right = Math.max(right, x);
+      }
+    }
+    return (right - left) / (canvas.width / canvas.getBoundingClientRect().width);
+  });
+}
+
 test("inline wheel reaches the note without changing the diagram", async ({ page }, testInfo) => {
+  await observeFitAPI(page);
   await page.goto("/"); await page.evaluate(() => window.ready);
   await page.evaluate(() => {
     const main = document.querySelector("main")!;
@@ -39,6 +68,7 @@ test("inline wheel reaches the note without changing the diagram", async ({ page
   // Wait for initial fonts/fit/paint to settle, then observe actual scene pixels.
   await page.waitForTimeout(1000);
   const before = await pixels(viewer);
+  const stateBefore = await fitState(page);
   await viewer.hover({ position: { x: 300, y: 250 } });
   await page.mouse.wheel(0, 180);
   await page.waitForTimeout(300);
@@ -55,6 +85,34 @@ test("inline wheel reaches the note without changing the diagram", async ({ page
   expect(horizontal).toBeGreaterThan(0);
   expect(afterVertical).toBe(before);
   expect(afterHorizontal).toBe(before);
+  expect(await fitState(page)).toEqual(stateBefore);
+});
+
+test("real CM6 inline vertical and horizontal wheel scroll the editor without scene or source changes", async ({ page }) => {
+  await observeFitAPI(page);
+  await page.goto("/"); await page.evaluate(() => window.ready);
+  const doc = "Before\n\n```mermaid\nflowchart LR\nA[Passive] --> B[Editor]\n```\n\n"
+    + Array.from({ length: 60 }, (_, i) => `Body line ${i}`).join("\n");
+  await page.evaluate(doc => {
+    const h = window.harness.editors; h.create("wheel-editor", doc);
+    const editor = h.view("wheel-editor");
+    Object.assign(editor.scrollDOM.style, { width: "800px", height: "420px", overflow: "auto" });
+    editor.contentDOM.style.width = "1100px"; editor.requestMeasure();
+  }, doc);
+  const viewer = page.locator("#wheel-editor .mermaid-excalidraw-container");
+  await expect(viewer).toHaveAttribute("data-state", "ready");
+  await expectInk(viewer); await page.waitForTimeout(700);
+  const before = await fitState(page), inkBefore = await fitInk(viewer), pixelsBefore = await pixels(viewer);
+  const source = await page.evaluate(() => window.harness.editors.snapshot("wheel-editor"));
+  await viewer.hover({ position: { x: 300, y: 200 } });
+  await page.mouse.wheel(0, 120);
+  await expect.poll(() => page.evaluate(() => window.harness.editors.view("wheel-editor").scrollDOM.scrollTop)).toBeGreaterThan(0);
+  await page.mouse.wheel(100, 0);
+  await expect.poll(() => page.evaluate(() => window.harness.editors.view("wheel-editor").scrollDOM.scrollLeft)).toBeGreaterThan(0);
+  expect(await fitState(page)).toEqual(before);
+  expect(await fitInk(viewer)).toEqual(inkBefore);
+  expect(await pixels(viewer)).toBe(pixelsBefore);
+  expect(await page.evaluate(() => window.harness.editors.snapshot("wheel-editor"))).toEqual(source);
 });
 
 for (const language of ["mermaid", "mermaid-excalidraw"]) {
@@ -118,9 +176,11 @@ for (const language of ["mermaid", "mermaid-excalidraw"]) {
       await page.setViewportSize({ width: 1100, height: 900 });
       await expectBoundedInk(viewer);
       await expectNoMenuChrome(viewer);
+      const closingRoot = await page.locator(".mermaid-excalidraw-modal").elementHandle();
       await modal.getByRole("button", { name: "Close preview" }).focus();
       await page.keyboard.press("Space");
       await expect(modal).toHaveCount(0);
+      await expectReleasedWheel(closingRoot);
       await expect(opener).toBeFocused();
       await expect.poll(() => pixels(inline)).toBe(before);
       expect(await page.evaluate(() => window.harness.hostState().blocks)).toEqual(sources);
@@ -204,6 +264,7 @@ for (const source of [
 }
 
 test("passive drag/trackpad-like events preserve scene and note input; modal wheel cannot scroll the note", async ({ page }) => {
+  await observeFitAPI(page);
   await page.goto("/"); await page.evaluate(() => window.ready);
   await page.evaluate(() => window.harness.mountSamples(["flowchart", "sequence"]));
   const inline = page.locator(".mermaid-excalidraw-container").first();
@@ -228,11 +289,14 @@ test("passive drag/trackpad-like events preserve scene and note input; modal whe
   await page.waitForTimeout(700);
   const notePosition = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
   const enlarged = modal.locator(".mermaid-excalidraw-enlarged");
-  const previewBefore = await pixels(enlarged);
+  const previewBefore = await fitState(page, 2), inkBefore = (await fitInk(enlarged))!;
   await enlarged.locator("canvas.interactive").hover({ position: { x: 200, y: 100 } });
   await page.mouse.wheel(80, 200);
-  await page.waitForTimeout(200);
-  expect(await pixels(enlarged)).toBe(previewBefore);
+  await expect.poll(async () => (await fitState(page, 2))?.zoom).toBeLessThan(previewBefore!.zoom);
+  await expect.poll(async () => {
+    const ink = (await fitInk(enlarged))!;
+    return Math.abs((ink.right - ink.left) - (inkBefore.right - inkBefore.left));
+  }).toBeGreaterThan(5);
   expect(await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }))).toEqual(notePosition);
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
@@ -252,37 +316,46 @@ test("one modal per renderer closes on OFF, note switch, pending reconversion an
   const open = async (index = 0) => {
     await page.getByRole("button", { name: "Open enlarged Mermaid diagram" }).nth(index).click();
     await expect(page.getByRole("dialog")).toHaveCount(1);
+    return page.locator(".mermaid-excalidraw-modal").elementHandle();
   };
   await open();
   await page.getByRole("button", { name: "Open enlarged Mermaid diagram" }).first().evaluate(node => {
     for (let i = 0; i < 5; i++) (node as HTMLButtonElement).click();
   });
   await expect(page.getByRole("dialog")).toHaveCount(1);
+  let root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.getByRole("button", { name: "Open enlarged Mermaid diagram" }).nth(1).evaluate(node => (node as HTMLButtonElement).click());
   await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expectReleasedWheel(root);
+  root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.evaluate(() => window.harness.updateSettings({ renderStandardMermaid: false }));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(page.getByRole("button", { name: "Open enlarged Mermaid diagram" })).toHaveCount(1);
   await expect(page.locator(".standard-mermaid")).toHaveCount(2);
-  await open();
+  root = await open();
   await page.evaluate(() => window.harness.updateSettings({ fontSize: 28 }));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
-  await open();
+  root = await open();
   await page.evaluate(() => window.harness.clear());
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.evaluate(() => window.harness.mountSamples(["er"]));
   await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
-  await open();
+  root = await open();
   await page.evaluate(() => window.harness.disable());
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.evaluate(() => window.harness.enable());
   await expect(page.locator('[data-state="ready"]')).toHaveCount(1);
-  await open();
+  root = await open();
   await page.locator(".modal-bg").click({ position: { x: 5, y: 5 } });
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   expect(errors).toEqual([]);
 });
 
@@ -295,12 +368,16 @@ test("real CM6: Modal activation preserves selection, source editing/IME and own
   const before = await page.evaluate(() => window.harness.editors.snapshot("modal-editor"));
   await editor.getByRole("button", { name: "Open enlarged Mermaid diagram" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(1);
+  let root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   expect(await page.evaluate(() => window.harness.editors.snapshot("modal-editor"))).toEqual(before);
   await page.keyboard.press("Escape");
+  await expectReleasedWheel(root);
   await expect(editor.getByRole("button")).toBeFocused();
   await editor.getByRole("button").click();
+  root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.evaluate(() => window.harness.editors.select("modal-editor", [[8, 8]]));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(editor.locator(".mermaid-excalidraw-container")).toHaveCount(0);
   await page.evaluate(() => {
     const h = window.harness.editors, doc = h.snapshot("modal-editor").doc;
@@ -315,19 +392,33 @@ test("real CM6: Modal activation preserves selection, source editing/IME and own
   });
   await expect(editor.locator('[data-state="ready"]')).toHaveCount(1);
   await editor.getByRole("button").click();
+  root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.evaluate(() => window.harness.editors.mode("modal-editor", false));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(editor.locator("canvas")).toHaveCount(0);
   await page.evaluate(() => window.harness.editors.mode("modal-editor", true));
   await expect(editor.locator('[data-state="ready"]')).toHaveCount(1);
   await editor.getByRole("button").click();
+  root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
+  await page.evaluate(() => {
+    const h = window.harness.editors, doc = h.snapshot("modal-editor").doc;
+    const from = doc.indexOf("Latest"); h.edit("modal-editor", from, from + 6, "Changed");
+  });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
+  await expect(editor.locator('[data-state="ready"]')).toHaveCount(1);
+  await editor.getByRole("button").click();
+  root = await page.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.evaluate(() => window.harness.editors.destroy("modal-editor"));
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectReleasedWheel(root);
   await expect(page.locator("canvas")).toHaveCount(0);
 });
 
 
 test("owner-document viewer and Modal clean up in a foreign window", async ({ page }) => {
+  await observeFitAPI(page);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/"); await page.evaluate(() => window.ready);
@@ -337,20 +428,38 @@ test("owner-document viewer and Modal clean up in a foreign window", async ({ pa
   const opener = foreign.getByRole("button", { name: "Open enlarged Mermaid diagram" });
   await opener.click();
   const modal = foreign.getByRole("dialog");
+  const escapedRoot = await foreign.locator(".mermaid-excalidraw-modal").elementHandle();
   await expect(modal).toHaveCount(1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expectInk(modal.locator(".mermaid-excalidraw-enlarged"));
+  const canvas = modal.locator("canvas.interactive");
+  await page.waitForTimeout(700);
+  const wheelBefore = (await fitState(page, 1))!;
+  const inkBefore = await ownerInkWidth(modal.locator(".mermaid-excalidraw-enlarged"));
+  await canvas.evaluate(node => {
+    const Wheel = Reflect.get(node.ownerDocument.defaultView!, "WheelEvent") as typeof WheelEvent;
+    const rect = node.getBoundingClientRect();
+    node.dispatchEvent(new Wheel("wheel", { deltaY: -100, ctrlKey: true, clientX: rect.x + 200,
+      clientY: rect.y + 150, bubbles: true, cancelable: true }));
+  });
+  await expect.poll(async () => (await fitState(page, 1))?.zoom).toBeCloseTo(wheelBefore.zoom * 1.2, 8);
+  await expect.poll(async () => {
+    return Math.abs(await ownerInkWidth(modal.locator(".mermaid-excalidraw-enlarged")) - inkBefore);
+  }).toBeGreaterThan(5);
   await modal.getByRole("button", { name: "Zoom in", exact: true }).focus();
   await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
+  await expectReleasedWheel(escapedRoot);
   await expect(opener).toBeFocused();
   await opener.click();
+  const hiddenRoot = await foreign.locator(".mermaid-excalidraw-modal").elementHandle();
   await page.evaluate(() => {
     const frame = document.getElementById("popout-fixture") as HTMLIFrameElement;
     frame.contentWindow!.dispatchEvent(new Event("pagehide"));
   });
   await expect(modal).toHaveCount(0);
+  await expectReleasedWheel(hiddenRoot);
   await page.evaluate(() => window.harness.disable());
   await expect(foreign.locator("canvas")).toHaveCount(0);
   expect(errors).toEqual([]);
