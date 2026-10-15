@@ -73,6 +73,8 @@ In the enlarged preview, point at the diagram canvas and wheel up to zoom in or 
 
 The **Zoom in**, **Zoom out**, **Fit to content** and **Reset zoom** buttons remain available. Fit uses automatic fitting; Reset returns to centered **100%**. Manual zoom stays between 10% and 3000%, with smooth scaling and a maximum 20% change per wheel event. Drag the canvas with a mouse or pen to pan. Wheel input over controls, the preview title or the host close button does not zoom, and wheel input inside the preview cannot scroll the note behind it. Desktop pinch support uses the wheel events delivered by the host; other OS/host gesture delivery forms and mobile touch gestures remain unverified.
 
+Drag pan works in main and desktop popout previews. Releasing or cancelling the pointer, switching windows, or closing the preview ends the drag.
+
 Press **Esc**, **Close preview**, or the host close button to return to the diagram without changing the note or its scroll position. Focus returns to the diagram button when it still exists. Tab and Shift+Tab keep focus inside the preview. Opening another diagram replaces the existing preview in the activating desktop window. Replacing or editing the source, turning standard rendering OFF, or disabling the plugin closes the affected preview; font-size changes also close it while reconverting.
 
 Edit the source text to change the diagram. Both displays stay read-only: the preview blocks drawing edits, clipboard copy/paste, import/save, export, links and editor dialogs. Host shortcuts are suspended while the enlarged viewer has focus. The inline button leaves normal note shortcuts and clipboard behavior available. Touch canvas interaction is unsupported. Copy the Mermaid source from your note editor when needed.

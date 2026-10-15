@@ -18,6 +18,7 @@ import { errorMessage, type DiagramData } from "./conversion";
 import { installViewOnlyBoundary, type ViewerKeymap } from "./viewOnlyBoundary";
 import { canvasFitOptions } from "./layout";
 import { normalizeWheelDelta, zoomAtAnchor } from "./wheelZoom";
+import { installCanvasPan } from "./canvasPan";
 
 export interface ViewSceneCache {
   converted?: { data: DiagramData; elements: ExcalidrawElement[] };
@@ -102,11 +103,27 @@ export function ExcalidrawView({ data, appearance, settings, container, keymap, 
     });
   }, [api, sceneAPI, failure, container]);
 
-  useLayoutEffect(() => enlarged
-    ? installViewOnlyBoundary(container, keymap, {
+  useLayoutEffect(() => {
+    if (!enlarged) return;
+    const disposeBoundary = installViewOnlyBoundary(container, keymap, {
       onEscape: onClose, blockWheel: true, onCanvasWheel, parentScope: modalScope,
       wheelRoot: container.closest<HTMLElement>(".mermaid-excalidraw-modal") ?? container,
-    }) : undefined, [container, keymap, enlarged, onClose, onCanvasWheel, modalScope]);
+    });
+    const disposePan = installCanvasPan(container, canvas => {
+      if (!api || sceneAPI !== api || failure !== null || canvas.getBoundingClientRect().width <= 0) return;
+      return (dx, dy) => {
+        flushSync(() => {
+          const state = api.getAppState();
+          if (!Number.isFinite(state.zoom.value) || state.zoom.value <= 0) return;
+          const scrollX = state.scrollX + dx / state.zoom.value;
+          const scrollY = state.scrollY + dy / state.zoom.value;
+          if (!Number.isFinite(scrollX) || !Number.isFinite(scrollY)) return;
+          api.updateScene({ appState: { scrollX, scrollY }, captureUpdate: CaptureUpdateAction.NEVER });
+        });
+      };
+    });
+    return () => { disposePan(); disposeBoundary(); };
+  }, [container, keymap, enlarged, onClose, onCanvasWheel, modalScope, api, sceneAPI, failure]);
 
   // Updating colors/roughness does not change the user's viewport. Font/source
   // reconversion creates a new view through DiagramMount's existing lifecycle.

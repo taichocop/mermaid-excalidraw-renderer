@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- Restore mouse/pen drag pan in enlarged previews in desktop popout windows. Own the gesture in the canvas's window and update the public viewport API, with cancellation on release, blur, pagehide and viewer disposal; inline diagrams remain passive.
+
 - Preserve the meaning of explicit translucent SVG shape fills during Light/Dark normalization by using the resolved foreground instead of background, restoring distinguishable `venn-beta` overlaps without changing geometry or opacity. Keep explicit `none`/`transparent` fills empty and retain the existing opaque-fill and zero-stroke marker policies.
 
 - Fit small diagrams above 100% using both scene dimensions and the padded canvas, bounded at 300% inline and 400% in enlarged previews. Replace obsolete bottom chrome reservation with measured inline-caption clearance; preview controls remain outside the canvas. Fit to content uses optimized fitting, Reset remains centered 100%, and theme/roughness redraws preserve manual navigation. Canvas height and SVG geometry are unchanged.
