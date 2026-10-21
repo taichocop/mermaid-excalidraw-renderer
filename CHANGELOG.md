@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Use the public Obsidian DOM helper for the enlarged preview's temporary pan cursor. Restore the original cursor value and priority only while the plugin still owns that declaration; preserve newer upstream cursor updates on gesture completion and cancellation. Keep the cursor scoped to the captured canvas in its owner window.
+
+### Maintenance
+
+- Record the published 0.1.4 Scorecard's 12 findings, 11 disclosures and two passes, including measured runtime boundaries, retained upstream limitations and a separate approval-only attestation proposal. A new release and public scan remain necessary; Issue #47 stays open.
+
 ## [0.1.4]
 
 ### Added

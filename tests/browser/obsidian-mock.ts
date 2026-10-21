@@ -14,6 +14,12 @@ export const editorLivePreviewField = StateField.define<boolean>({
 export function installDomHelpers(win: Window) {
   const RealmNode = Reflect.get(win, "Node") as typeof Node;
   const doc = win.document;
+  const RealmHTMLElement = Reflect.get(win, "HTMLElement") as typeof HTMLElement;
+  // Obsidian 1.14.4's public helper delegates each key to CSSOM setProperty;
+  // unlike setCssStyles it accepts CSS property names, but no priority argument.
+  RealmHTMLElement.prototype.setCssProps = function (props) {
+    for (const [property, value] of Object.entries(props)) this.style.setProperty(property, value);
+  };
   RealmNode.prototype.createEl = function (tag, options) {
     const element = doc.createElement(tag);
     if (typeof options === "string") element.className = options;
