@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.6]
+
 ### Security
 
-- Update the locked DOMPurify dependency from 3.4.16 to 3.4.17 within Mermaid's existing version range, addressing GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f. Mermaid/Excalidraw pins and the plugin's strict configuration, source guards and read-only boundary remain unchanged.
+- Update the bundled DOMPurify dependency from 3.4.16 to 3.4.17 within Mermaid's existing version range, addressing GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f. Mermaid/Excalidraw pins, strict configuration, source guards and read-only behavior for standard `mermaid` and dedicated `mermaid-excalidraw` blocks remain unchanged. Desktop requirement remains Obsidian **1.14.4+**.
 
 ## [0.1.5]
 
