@@ -1,5 +1,17 @@
 # Release readiness — 0.1.0
 
+## Dependency audit follow-up — 2026-10-24, unreleased candidate
+
+[Issue #51](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/51) tracks the production DOMPurify update separately from the broader Scorecard work in #47 and scrolling investigation in #50. No version, tag or published release is changed by this remediation; the publication evidence below remains historical.
+
+With npm 10.9.9 and the public npm registry, clean installation of main `c8a1468d7faf4bfc339c09e092208b28b3466436` resolves DOMPurify 3.4.16. The production audit currently reports one affected package with three advisories: [GHSA-cg2g-xh64-v4q7](https://github.com/advisories/GHSA-cg2g-xh64-v4q7) (global advisory Critical), [GHSA-mrv2-3pqr-j5jr](https://github.com/advisories/GHSA-mrv2-3pqr-j5jr) (High), and [GHSA-c6gr-qvv4-5v3f](https://github.com/advisories/GHSA-c6gr-qvv4-5v3f) (Low). The first affects versions 3.4.4–3.4.16; the other two affect versions through 3.4.16. All list 3.4.17 as patched, with no CVE identifier assigned at this check. Upstream repository advisories label all three Low; global advisory severity is not a measured plugin-specific impact. The earlier four-critical-package aggregate was transitive propagation, not four demonstrated Critical vulnerabilities; its precise difference from today's aggregate is unconfirmed. A fresh isolated cache reproduces today's result.
+
+Mermaid 11.17.2 declares `dompurify: ^3.3.3`. Updating only that lock entry to 3.4.17 leaves one resolved sanitizer and requires no new override. Clean-install production audit then reports **zero vulnerabilities**. The full audit still reports four moderate development-only package entries; they are not waived or repaired by this scoped change.
+
+The sanitizer is shipped in the production bundle and reachable from Mermaid label/SVG string sanitization. Inspected Mermaid callsites do not enable the disclosed shadow-root/template DOM-return, in-place node-detachment-hook, or XHTML/SMIL configuration combinations. Protected strict configuration and `dompurifyConfig` prevent source overrides. No plugin exploit is demonstrated, and these constraints do not justify retaining affected sanitizer code or establish a general sandbox. The [3.4.17 upstream patch](https://github.com/cure53/DOMPurify/commit/a77a3e78b59f72fa4d1c83f22e121ad9cc7d3575) also hardens other sanitization cases, so rendering/security regressions and Native smoke checks remain necessary. Final artifact, test, CI and independent-review evidence belongs to the remediation PR.
+
+The production-bundle sanitizer regression uses benign XHTML animation attributes to check the patched `attributeName` guard. It exercises a non-default dependency configuration rather than demonstrating exploitation through the plugin. Publication of a future release and a fresh Directory scan remain separate human decisions.
+
 Audit and publication update: 2026-10-08 (Asia/Tokyo). The GitHub release and Community Directory public listing are published. The public Scorecard results are recorded below; scanner findings require triage.
 
 ## Current release status
