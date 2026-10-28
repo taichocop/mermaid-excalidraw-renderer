@@ -62,6 +62,9 @@
    listener or preventDefault is installed on the note preview. */
 .mermaid-excalidraw-passive {
   pointer-events: none;
+  /* Keep upstream viewport-sized fixed layers inside this preview, even when
+     the host/theme makes the enclosing CM6 block a scroll container. */
+  contain: paint;
 }
 .mermaid-excalidraw-container .excalidraw .zoom-actions,
 .mermaid-excalidraw-container .excalidraw .scroll-back-to-content {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Contain the inline viewer's fixed drawing layers within its preview so themes that make Live Preview blocks scrollable cannot divert note scrolling into the diagram's DOM. Preserve passive input, the scene viewport and enlarged-preview navigation.
+
 ## [0.1.6]
 
 ### Security
