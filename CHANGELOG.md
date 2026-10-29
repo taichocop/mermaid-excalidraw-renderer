@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+## [0.1.7]
+
 ### Fixed
 
-- Contain the inline viewer's fixed drawing layers within its preview so themes that make Live Preview blocks scrollable cannot divert note scrolling into the diagram's DOM. Preserve passive input, the scene viewport and enlarged-preview navigation.
+- Restore passive note scrolling for standard `mermaid` and dedicated `mermaid-excalidraw` previews in Reading view and Live Preview. In theme-affected Live Preview blocks, fixed drawing layers could expand the widget's scrollable area. Limit those layers to the passive preview with `contain: paint`, preserving natural note scrolling and enlarged-Modal zoom/pan.
+
+### Verification
+
+- Verified measured fixtures in a synthetic Vault on Obsidian Desktop **1.14.4**, with Native/CDP checks and separate owner-operated physical mouse wheel, trackpad two-finger scrolling, boundary crossing and pinch checks in both views. Coverage applies to the tested configuration; desktop requirement remains **1.14.4+**.
 
 ## [0.1.6]
 
