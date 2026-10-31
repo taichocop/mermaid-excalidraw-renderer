@@ -67,6 +67,8 @@ Dedicated `mermaid-excalidraw` blocks keep Obsidian’s existing code-block widg
 | Live Preview | Excalidraw outside the selection | Host renderer | Existing host code-block widget |
 | Source mode | Editable Markdown | Editable Markdown | Editable Markdown |
 
+Diagrams appear without hovering or focusing the preview; the transparent enlargement button leaves the diagram visible in its normal and hovered states.
+
 Inline diagrams are passive: scroll input over a diagram goes to the note, and dragging does not pan the diagram. Click the diagram to open an enlarged preview, or focus its **Open enlarged Mermaid diagram** button and press **Enter** or **Space**. The standard-block setting must be ON for standard `mermaid` previews; dedicated blocks remain enabled with either setting.
 
 In the enlarged preview, point at the diagram canvas and wheel up to zoom in or down to zoom out. On a desktop trackpad, pinch out to zoom in and pinch in to zoom out. Zoom keeps the scene position under the pointer as its anchor. Ordinary vertical two-finger scrolling also zooms: wheel events do not identify the physical device, so the plugin applies the same predictable rule without guessing whether an event came from a mouse or trackpad. Horizontal-only wheel input does not pan or zoom. Inline diagrams remain passive and leave scrolling to the note.

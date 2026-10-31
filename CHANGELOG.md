@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the inline enlargement button transparent before hover in Reading view and Live Preview. Obsidian's default button background could cover an already-painted diagram after passive paint containment was added. Preserve passive note scrolling and enlarged-preview navigation.
+
 ## [0.1.7]
 
 ### Fixed
