@@ -44,8 +44,10 @@ async function raster(viewer: Locator) {
  */
 async function screen(page: Page, viewer: Locator, dark: boolean) {
   const rect = await viewer.locator("canvas.static").boundingBox();
-  expect(rect).not.toBeNull();
-  const clip = { x: rect!.x + 6, y: rect!.y + 6, width: rect!.width - 12, height: rect!.height - 54 };
+  // Hidden/revealed canvases may not have committed their next dimensions yet.
+  // Return no ink so polling still requires a real, nonempty screen capture.
+  if (!rect || rect.width <= 12 || rect.height <= 54) return { png: Buffer.alloc(0), ink: 0 };
+  const clip = { x: rect.x + 6, y: rect.y + 6, width: rect.width - 12, height: rect.height - 54 };
   expect(clip.y).toBeGreaterThanOrEqual(0);
   expect(clip.y + clip.height).toBeLessThan(page.viewportSize()!.height);
   const png = await page.screenshot({ clip, scale: "css" });
@@ -126,6 +128,17 @@ for (const mode of ["reading", "live"] as const) {
       const viewer = page.locator(".mermaid-excalidraw-container");
       await expect.poll(async () => (await fitInk(viewer))?.count ?? 0).toBeGreaterThan(100);
       await page.waitForTimeout(600);
+      // CI observed a zero-width canvas between reveal and its dimension commit.
+      // Prove that this is a pending sample, not an invalid screenshot request.
+      const canvas = viewer.locator("canvas.static");
+      const previousWidth = await canvas.evaluate(node => {
+        const width = node.style.width; node.style.width = "0px"; return width;
+      });
+      try {
+        expect((await screen(page, viewer, false)).ink).toBe(0);
+      } finally {
+        await canvas.evaluate((node, width) => { node.style.width = width; }, previousWidth);
+      }
       const before = await fitState(page);
       await viewer.locator(".mermaid-excalidraw-open").hover({ position: { x: 180, y: 100 } });
       expect(await fitState(page)).toEqual(before);
