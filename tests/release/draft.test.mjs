@@ -191,3 +191,18 @@ test('upload failures fail instead of returning a verified draft', async (t) => 
   await assert.rejects(refresh(client, assets), /Upload failed/);
   assert.ok(!client.mutations.some((item) => item.type === 'edit'));
 });
+
+test('release workflow hardening and attestation verification suite passes', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const res = spawnSync(
+    process.execPath,
+    ['--experimental-strip-types', '--test', 'tests/release/workflow-hardening.test.ts'],
+    { encoding: 'utf8', env },
+  );
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+  assert.match(res.stdout, /(?:ℹ|#)\s*tests 5\b/, 'Expected all 5 workflow-hardening tests to execute');
+  assert.match(res.stdout, /(?:ℹ|#)\s*pass 5\b/, 'Expected all 5 workflow-hardening tests to pass');
+  assert.match(res.stdout, /(?:ℹ|#)\s*fail 0\b/, 'Expected 0 workflow-hardening test failures');
+});

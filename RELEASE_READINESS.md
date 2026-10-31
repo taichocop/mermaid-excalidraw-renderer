@@ -1,5 +1,31 @@
 # Release readiness — 0.1.0
 
+## Release workflow artifact attestations — 2026-10-27, unreleased candidate
+
+For future releases after published `0.1.6` (`ce12a9fd801a8abec74cdf8a7d3b0b50dfca40f6`), [`.github/workflows/release.yml`](.github/workflows/release.yml) adds an isolated `attest` job between `validate` and `draft` (`validate` → `attest` → `draft`) to address the two `Missing GitHub artifact attestations for release assets` (`main.js` and `styles.css`) findings tracked in [Issue #47](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/47) and [Issue #16](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/16). Published `0.1.6` and earlier releases/tags remain untouched.
+
+### Permission and trust boundaries
+
+- **Workflow top-level & `validate` job**: `contents: read` only. All dependency installation (`npm ci`), lint/unit/release tests, `npm audit --omit=dev`, production bundle generation (`npm run build`), 6-asset validation, and Playwright Chromium browser tests execute without OIDC or attestation write privileges.
+- **`attest` job** (`needs: validate`): Scoped exclusively to `contents: read`, `id-token: write`, and `attestations: write` (`artifact-metadata: write` is omitted because `push-to-registry` is false and the repository owner is a user account). It runs on a clean runner without `npm ci`, build scripts, or execution of `main.js`. It checks out with `persist-credentials: false` and `fetch-depth: 0`, verifies that the release tag commit belongs to `origin/main` via `scripts/validate-release-source.mjs`, downloads the `release-assets` artifact from the same workflow run, verifies `SHA256SUMS.txt` and the 6-asset contract (`inspectReleaseAssets('release-assets')`), signs a single multi-subject SLSA Build Provenance v1 (`https://slsa.dev/provenance/v1`) bundle for all six release files (`LICENSE`, `SHA256SUMS.txt`, `THIRD_PARTY_NOTICES.txt`, `main.js`, `manifest.json`, `styles.css`) using `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (`v4.2.2`), and verifies both the local bundle (`--bundle`) and the persisted GitHub API record via `gh attestation verify` against the exact repository, workflow path, tag ref, commit SHA, run invocation URI, and all 6 subject SHA-256 digests.
+- **`draft` job** (`needs: [validate, attest]`): Retains `contents: write` only (no OIDC or attestation permissions). If signing or verification fails in `attest`, `draft` does not run (fail-closed). Before synchronizing the Draft Release via `scripts/sync-draft-release.mjs`, `draft` also verifies `scripts/validate-release-source.mjs` with full git history (`fetch-depth: 0`) and re-verifies `SHA256SUMS.txt` and remote uploaded asset digests.
+
+### Pre-publication maintainer verification for future releases
+
+Because `.github/workflows/release.yml` triggers only on `push.tags: ['*.*.*']`, PR CI validates workflow structure, permissions, and mock verification policies statically, whereas live GitHub OIDC token issuance and Sigstore signing occur only on a tag workflow run. Before manually publishing a future Draft Release (`X.Y.Z` at `NEW_RELEASE_COMMIT_SHA`), download all six draft attachments and verify their attestations:
+
+```sh
+for file in LICENSE SHA256SUMS.txt THIRD_PARTY_NOTICES.txt main.js manifest.json styles.css; do
+  gh attestation verify "$file" \
+    --repo taichocop/mermaid-excalidraw-renderer \
+    --signer-workflow taichocop/mermaid-excalidraw-renderer/.github/workflows/release.yml \
+    --source-ref "refs/tags/X.Y.Z" \
+    --source-digest "NEW_RELEASE_COMMIT_SHA" \
+    --predicate-type "https://slsa.dev/provenance/v1" \
+    --deny-self-hosted-runners
+done
+```
+
 ## Dependency audit follow-up — 2026-10-24, unreleased candidate
 
 [Issue #51](https://github.com/taichocop/mermaid-excalidraw-renderer/issues/51) tracks the production DOMPurify update separately from the broader Scorecard work in #47 and scrolling investigation in #50. No version, tag or published release is changed by this remediation; the publication evidence below remains historical.

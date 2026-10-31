@@ -51,8 +51,168 @@ jobs:
         with:
           name: release-test-evidence
           path: test-results/
-  draft:
+  attest:
     needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Require the release tag commit to belong to main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          node scripts/validate-release-source.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Verify release assets before signing
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd release-assets
+          sha256sum --check SHA256SUMS.txt
+          cd ..
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { inspectReleaseAssets, validateMetadata } from './scripts/validate-release.mjs';
+          const json = async (name) => JSON.parse(await readFile(name, 'utf8'));
+          const [manifest, pkg, lock, versions] = await Promise.all([
+            json('manifest.json'), json('package.json'), json('package-lock.json'), json('versions.json'),
+          ]);
+          validateMetadata(manifest, pkg, lock, versions, process.env.RELEASE_TAG);
+          await inspectReleaseAssets('release-assets');
+          assert.deepEqual(await json('release-assets/manifest.json'), manifest, 'Uploaded manifest must match source manifest');
+          EOF
+      - name: Attest release assets
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            release-assets/LICENSE
+            release-assets/SHA256SUMS.txt
+            release-assets/THIRD_PARTY_NOTICES.txt
+            release-assets/main.js
+            release-assets/manifest.json
+            release-assets/styles.css
+      - name: Verify generated attestation bundle and GitHub API record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import { spawnSync } from 'node:child_process';
+          import { readFile } from 'node:fs/promises';
+          import { resolve } from 'node:path';
+          import { inspectReleaseAssets, RELEASE_ASSET_NAMES } from './scripts/validate-release.mjs';
+
+          const repo = process.env.GITHUB_REPOSITORY ?? '';
+          const commit = process.env.GITHUB_SHA ?? '';
+          const tag = process.env.RELEASE_TAG ?? '';
+          const runId = process.env.GITHUB_RUN_ID ?? '';
+          const runAttempt = process.env.GITHUB_RUN_ATTEMPT ?? '';
+          const bundlePath = process.env.BUNDLE_PATH ?? '';
+          const workflowPath = '.github/workflows/release.yml';
+          const predicateType = 'https://slsa.dev/provenance/v1';
+          const expectedRef = `refs/tags/${tag}`;
+          const expectedRepoUri = `https://github.com/${repo}`;
+          const expectedOwnerUri = `https://github.com/${repo.split('/')[0]}`;
+          const expectedSignerUri = `${expectedRepoUri}/${workflowPath}@${expectedRef}`;
+          const expectedInvocationUri = `${expectedRepoUri}/actions/runs/${runId}/attempts/${runAttempt}`;
+
+          assert.match(repo, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, 'Invalid GITHUB_REPOSITORY');
+          assert.match(commit, /^[0-9a-f]{40}$/i, 'Invalid GITHUB_SHA');
+          assert.match(tag, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'Invalid RELEASE_TAG');
+          assert.match(runId, /^[1-9]\d*$/, 'Invalid GITHUB_RUN_ID');
+          assert.match(runAttempt, /^[1-9]\d*$/, 'Invalid GITHUB_RUN_ATTEMPT');
+          assert.ok(bundlePath && !resolve(bundlePath).startsWith(resolve('release-assets')),
+            'Attestation bundle must be stored outside release-assets');
+          const bundleLines = (await readFile(bundlePath, 'utf8')).trim().split(/\r?\n/).filter(Boolean);
+          assert.equal(bundleLines.length, 1, 'Expected exactly one generated attestation bundle');
+
+          const assets = await inspectReleaseAssets('release-assets');
+          const expectedDigests = new Map(assets.map((asset) => [asset.name, asset.digest.slice(7)]));
+          assert.deepEqual([...expectedDigests.keys()].sort(), [...RELEASE_ASSET_NAMES]);
+
+          function matchesExpectedAttestation(entry, assetName, expectedSha) {
+            const vr = entry?.verificationResult;
+            const cert = vr?.signature?.certificate;
+            const stmt = vr?.statement;
+            if (!cert || !stmt || stmt.predicateType !== predicateType) return false;
+            if (!Array.isArray(vr.verifiedTimestamps) || vr.verifiedTimestamps.length === 0) return false;
+            if (cert.issuer !== 'https://token.actions.githubusercontent.com') return false;
+            if (cert.runnerEnvironment !== 'github-hosted') return false;
+            if (cert.sourceRepositoryOwnerURI?.toLowerCase() !== expectedOwnerUri.toLowerCase()) return false;
+            if (cert.sourceRepositoryURI?.toLowerCase() !== expectedRepoUri.toLowerCase()) return false;
+            if (cert.sourceRepositoryRef !== expectedRef) return false;
+            if (cert.sourceRepositoryDigest?.toLowerCase() !== commit.toLowerCase()) return false;
+            if (cert.buildSignerURI?.toLowerCase() !== expectedSignerUri.toLowerCase()) return false;
+            if (cert.buildConfigURI?.toLowerCase() !== expectedSignerUri.toLowerCase()) return false;
+            if (cert.buildSignerDigest?.toLowerCase() !== commit.toLowerCase()) return false;
+            if (cert.buildConfigDigest?.toLowerCase() !== commit.toLowerCase()) return false;
+            if (cert.runInvocationURI?.toLowerCase() !== expectedInvocationUri.toLowerCase()) return false;
+            if (cert.subjectAlternativeName?.toLowerCase() !== expectedSignerUri.toLowerCase()) return false;
+            if (!Array.isArray(stmt.subject) || stmt.subject.length !== RELEASE_ASSET_NAMES.length) return false;
+            const subjectNames = stmt.subject.map((s) => s?.name).sort();
+            if (JSON.stringify(subjectNames) !== JSON.stringify([...RELEASE_ASSET_NAMES])) return false;
+            for (const s of stmt.subject) {
+              if (!s?.name || s.name.includes('/') || s.name.includes('\\')) return false;
+              if (s.digest?.sha256?.toLowerCase() !== expectedDigests.get(s.name)?.toLowerCase()) return false;
+            }
+            const target = stmt.subject.find((s) => s.name === assetName);
+            if (!target || target.digest?.sha256?.toLowerCase() !== expectedSha.toLowerCase()) return false;
+            const wf = stmt.predicate?.buildDefinition?.externalParameters?.workflow;
+            if (wf && (wf.repository?.toLowerCase() !== expectedRepoUri.toLowerCase() || wf.path !== workflowPath || wf.ref !== expectedRef)) return false;
+            const resolved = stmt.predicate?.buildDefinition?.resolvedDependencies;
+            if (Array.isArray(resolved) && resolved.length > 0 && resolved[0]?.digest?.gitCommit?.toLowerCase() !== commit.toLowerCase()) return false;
+            const invocationId = stmt.predicate?.runDetails?.metadata?.invocationId;
+            if (invocationId && invocationId.toLowerCase() !== expectedInvocationUri.toLowerCase()) return false;
+            return true;
+          }
+
+          for (const mode of ['bundle', 'online']) {
+            for (const asset of assets) {
+              const args = [
+                'attestation', 'verify', asset.path,
+                '--repo', repo,
+                '--signer-workflow', `${repo}/${workflowPath}`,
+                '--source-ref', expectedRef,
+                '--source-digest', commit,
+                '--predicate-type', predicateType,
+                '--deny-self-hosted-runners',
+                '--format', 'json',
+              ];
+              if (mode === 'bundle') args.push('--bundle', bundlePath);
+              const res = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+              assert.equal(res.status, 0, `gh attestation verify (${mode}) failed for ${asset.name}`);
+              const parsed = JSON.parse(res.stdout);
+              assert.ok(Array.isArray(parsed) && parsed.length > 0, `Empty verification output (${mode}) for ${asset.name}`);
+              if (mode === 'bundle') assert.equal(parsed.length, 1, `Expected 1 bundle verification result for ${asset.name}`);
+              assert.ok(parsed.some((entry) => matchesExpectedAttestation(entry, asset.name, asset.digest.slice(7))),
+                `No verified attestation (${mode}) matched exact run/tag/commit/6-subject policy for ${asset.name}`);
+            }
+          }
+          await inspectReleaseAssets('release-assets');
+          console.log(`Verified local bundle and GitHub API attestations for all ${assets.length} release assets.`);
+          EOF
+  draft:
+    needs:
+      - validate
+      - attest
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -61,9 +221,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+      - name: Require the release tag commit to belong to main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          node scripts/validate-release-source.mjs
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-assets
