@@ -70,7 +70,9 @@
 .mermaid-excalidraw-container .excalidraw .scroll-back-to-content {
   display: none;
 }
-.mermaid-excalidraw-open {
+/* Beat the host default button paint in the normal state as well as hover.
+   Paint containment makes this sibling opener stack above the inline canvas. */
+.mermaid-excalidraw-container .mermaid-excalidraw-open {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -84,7 +86,7 @@
   color: var(--text-muted, #666);
   touch-action: pan-x pan-y;
 }
-.mermaid-excalidraw-open:hover {
+.mermaid-excalidraw-container .mermaid-excalidraw-open:hover {
   background: transparent;
   box-shadow: none;
 }
