@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+## [0.1.8]
+
 ### Fixed
 
-- Keep the inline enlargement button transparent before hover in Reading view and Live Preview. Obsidian's default button background could cover an already-painted diagram after passive paint containment was added. Preserve passive note scrolling and enlarged-preview navigation.
+- Restore diagram visibility before pointer hover in Reading view and Live Preview for standard `mermaid` and dedicated `mermaid-excalidraw` blocks. Increase the transparent enlargement button's CSS selector specificity so Obsidian's default button background cannot cover an already-painted canvas.
+- Preserve Issue #50's passive note scrolling with paint containment and retain enlarged-Modal zoom, pan and navigation.
+
+### Verification
+
+- PR #58's same-fixture comparison covered 48 Reading/Live Preview, standard/dedicated, Light/Dark and native/SVG combinations: 0.1.6 was visible before hover in 48/48 cases, 0.1.7 in 0/48, and the fixed candidate in 48/48.
+- PR #58's production-bundle browser suite passed 233/233 tests, including initial visibility, passive scrolling and enlarged-preview regressions.
+- Native checks used a synthetic Vault on macOS Obsidian **1.14.5**. The owner separately reported successful physical mouse/trackpad checklist checks for that runtime; CDP input is separate evidence. Coverage remains limited to the measured fixtures and reported checklist. Desktop requirement remains **1.14.4+**.
 
 ## [0.1.7]
 
